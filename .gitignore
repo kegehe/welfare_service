@@ -1,0 +1,32 @@
+/target
+/data/*.db
+/data/*.db-wal
+/data/*.db-shm
+/config.toml
+*.log
+
+# IDE / Editor
+.claude/
+.cursor/
+.trae/
+.agents/
+.vscode/
+.idea/
+
+# Environment variables
+.env
+.env.*
+
+# Frontend
+/frontend/node_modules/
+/frontend/dist/
+
+# Build artifacts
+/static/index.html
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Rust
+**/*.rs.bk
