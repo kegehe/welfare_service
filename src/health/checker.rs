@@ -161,7 +161,7 @@ impl HealthChecker {
         }
 
         // 清理过期用量统计数据
-        if let Err(e) = self.state.db.cleanup_usage_hourly(7, 90) {
+        if let Err(e) = self.state.db.cleanup_usage_hourly(90, 90) {
             tracing::error!("清理过期用量统计失败: {}", e);
         }
 

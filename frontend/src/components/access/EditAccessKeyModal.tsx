@@ -30,7 +30,7 @@ export function EditAccessKeyModal({ open, accessKey, onClose, onSubmit }: Props
     try {
       const values = await form.validateFields()
       setLoading(true)
-      // 日期格式：YYYY-MM-DD HH:mm:ss（与 Vue 版本一致）
+      // 日期格式：YYYY-MM-DD HH:mm:ss
       const expiresAt = values.expires_at
         ? values.expires_at.format('YYYY-MM-DD HH:mm:ss')
         : null

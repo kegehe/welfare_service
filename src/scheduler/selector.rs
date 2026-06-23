@@ -31,18 +31,13 @@ impl<'a> KeySelector<'a> {
     }
 
     /// 获取当前可用候选 Key。返回结果会被随机打散，调用方可按顺序尝试。
-    ///
-    /// `has_tools`: 请求中是否包含 tools 参数或 tool_result 消息。
-    /// 目前仅用于日志标记；带工具的请求也会在无精确匹配时映射到
-    /// 号池 Key 自己配置的上游模型。
     pub fn candidates(
         &self,
         model: &str,
         protocol: Protocol,
-        has_tools: bool,
     ) -> Result<Vec<KeyCandidate>> {
         let keys = self.state.db.get_active_keys()?;
-        self.candidates_from_keys(keys, model, protocol, has_tools)
+        self.candidates_from_keys(keys, model, protocol)
     }
 
     fn candidates_from_keys(
@@ -50,7 +45,6 @@ impl<'a> KeySelector<'a> {
         keys: Vec<ApiKeyRecord>,
         requested_model: &str,
         protocol: Protocol,
-        has_tools: bool,
     ) -> Result<Vec<KeyCandidate>> {
         if keys.is_empty() {
             return Err(AppError::NoAvailableKey);
@@ -98,13 +92,6 @@ impl<'a> KeySelector<'a> {
             return Ok(exact_candidates);
         }
 
-        if has_tools {
-            tracing::info!(
-                "请求包含工具调用但无精确匹配模型: requested_model={}，将按号池 Key 配置模型回退映射",
-                requested_model
-            );
-        }
-
         let mut candidates: Vec<KeyCandidate> = available
             .into_iter()
             .map(|(key, models)| {
@@ -131,7 +118,7 @@ impl<'a> KeySelector<'a> {
     /// 选择一个可用的 Key
     #[allow(dead_code)]
     pub fn select_key(&self, model: &str) -> Result<ApiKeyRecord> {
-        self.candidates(model, Protocol::OpenAI, false)?
+        self.candidates(model, Protocol::OpenAI)?
             .into_iter()
             .map(|candidate| candidate.key)
             .next()
@@ -227,7 +214,6 @@ mod tests {
                 vec![make_key(1, r#"["mimo-v2.5-pro"]"#, "https://claude.test")],
                 "claude-opus-4-8",
                 Protocol::Claude,
-                true,
             )
             .unwrap();
 

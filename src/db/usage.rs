@@ -142,10 +142,14 @@ impl Database {
     }
 
     /// 获取全局概览统计
+    ///
+    /// 注意: usage_hourly 中每条请求同时写入 pool 和 access 两个维度，
+    /// 所以总请求/Token 数只需查询一个维度（pool）避免双倍计算。
     pub fn get_stats_overview(&self, hours: i64) -> Result<OverviewStats> {
         let conn = self.conn();
         let cutoff_hb = cutoff_hour_bucket(hours);
 
+        // 仅查询 pool 维度即可得到准确的总量（每请求在 pool/access 各写一条）
         let mut stmt = conn.prepare(
             "SELECT
                 COALESCE(SUM(request_count), 0),
@@ -162,19 +166,21 @@ impl Database {
             })
             .unwrap_or((0, 0, 0));
 
-        // 活跃 key 数量
+        // 活跃 key 数量 — 仅统计所选时间段内有请求记录的 Key
         let active_pool_keys: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM api_keys WHERE status = 'active'",
-                [],
+                "SELECT COUNT(DISTINCT key_id) FROM usage_hourly
+                 WHERE dimension = 'pool' AND hour_bucket >= ?1",
+                params![cutoff_hb],
                 |row| row.get(0),
             )
             .unwrap_or(0);
 
         let active_access_keys: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM access_keys WHERE status = 'active'",
-                [],
+                "SELECT COUNT(DISTINCT key_id) FROM usage_hourly
+                 WHERE dimension = 'access' AND hour_bucket >= ?1",
+                params![cutoff_hb],
                 |row| row.get(0),
             )
             .unwrap_or(0);
@@ -220,12 +226,13 @@ impl Database {
                 ) as avg_latency_ms,
                 (SELECT MAX(rl.created_at)
                  FROM request_logs rl
-                 WHERE rl.key_id = ak.id) as last_used_at
+                 WHERE rl.key_id = ak.id
+                   AND rl.created_at >= ?1) as last_used_at
              FROM api_keys ak
              LEFT JOIN usage_hourly uh ON uh.dimension = 'pool' AND uh.key_id = ak.id
                  AND uh.hour_bucket >= ?2
              GROUP BY ak.id
-             ORDER BY total_prompt_tokens DESC",
+             ORDER BY total_requests DESC",
         )?;
 
         let rows = stmt
@@ -284,6 +291,7 @@ impl Database {
     pub fn get_access_key_stats(&self, hours: i64) -> Result<Vec<AccessKeyStatsRow>> {
         let conn = self.conn();
         let cutoff_hb = cutoff_hour_bucket(hours);
+        let cutoff_str = cutoff_datetime_str(hours);
 
         let mut stmt = conn.prepare(
             "SELECT
@@ -292,16 +300,19 @@ impl Database {
                 COALESCE(SUM(uh.request_count), 0) as total_requests,
                 COALESCE(SUM(uh.prompt_tokens), 0) as total_prompt_tokens,
                 COALESCE(SUM(uh.completion_tokens), 0) as total_completion_tokens,
-                ak.last_used_at
+                (SELECT MAX(rl.created_at)
+                 FROM request_logs rl
+                 WHERE rl.access_key_id = ak.id
+                   AND rl.created_at >= ?1) as last_used_at
              FROM access_keys ak
              LEFT JOIN usage_hourly uh ON uh.dimension = 'access' AND uh.key_id = ak.id
-                 AND uh.hour_bucket >= ?1
+                 AND uh.hour_bucket >= ?2
              GROUP BY ak.id
-             ORDER BY total_prompt_tokens DESC",
+             ORDER BY total_requests DESC",
         )?;
 
         let rows = stmt
-            .query_map(params![cutoff_hb], |row| {
+            .query_map(params![cutoff_str, cutoff_hb], |row| {
                 Ok(AccessKeyStatsRow {
                     access_key_id: row.get(0)?,
                     name: row.get(1)?,

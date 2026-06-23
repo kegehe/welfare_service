@@ -160,6 +160,30 @@ export interface HourlyStats {
   completion_tokens: number
 }
 
+// 用量统计 - 号池 Key 详情（含按模型细分）
+export interface PoolKeyStatsDetail {
+  key_id: number
+  name: string
+  platform: string
+  total_requests: number
+  total_prompt_tokens: number
+  total_completion_tokens: number
+  success_rate: number | null
+  avg_latency_ms: number | null
+  by_model: ModelStats[]
+}
+
+// 用量统计 - 访问 Key 详情（含按模型细分）
+export interface AccessKeyStatsDetail {
+  access_key_id: number
+  name: string
+  total_requests: number
+  total_prompt_tokens: number
+  total_completion_tokens: number
+  last_used_at: string | null
+  by_model: ModelStats[]
+}
+
 // 用量统计 - 访问 Key 列表响应
 export interface AccessKeyStatsResponse {
   total: {

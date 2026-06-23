@@ -93,7 +93,7 @@ SSE 事件格式：
 
 ### 4. 前端 — ActiveKeysBar 组件
 
-**新增组件 `ActiveKeysBar.vue`**，放置位置：StatsOverview 下方、PoolKeysTable 上方。
+**新增组件 `ActiveKeysBar.tsx`**，放置位置：StatsOverview 下方、PoolKeysTable 上方。
 
 **布局**：
 
@@ -109,14 +109,14 @@ SSE 事件格式：
 
 **SSE 连接管理**：
 
-- `onMounted` 时创建 `EventSource('/admin/keys/active-stream')`
+- `useEffect` 时创建 `EventSource('/admin/keys/active-stream')`
 - 收到 `snapshot`：替换整个活跃列表
 - 收到 `activate`：添加到活跃列表
 - 收到 `deactivate`：按 request_id 移除
-- `onUnmounted` 时关闭 `EventSource`
+- `useEffect` cleanup 时关闭 `EventSource`
 - `EventSource` 自带断线重连，重连后后端自动推送 `snapshot`
 
-**持续时间更新**：`setInterval` 每秒更新持续时间显示，组件销毁时清除。
+**持续时间更新**：`setInterval` 每秒更新持续时间显示，useEffect cleanup 时清除。
 
 **样式**：复用 `variables.css` 设计系统，卡片用 `--ws-pool`（teal）左边框标识活跃状态。
 
@@ -171,6 +171,6 @@ SSE 重连 → 后端推送 snapshot
 | `src/server/routes.rs` | 修改 | 注册 SSE 路由 |
 | `src/main.rs` | 修改 | 初始化 `ActiveKeysNotifier` |
 | `frontend/src/types/index.ts` | 修改 | 新增 `ActiveKeyEntry` 接口 |
-| `frontend/src/components/ActiveKeysBar.vue` | 新增 | 活跃密钥展示组件 |
-| `frontend/src/App.vue` | 修改 | 引入 ActiveKeysBar 组件 |
+| `frontend/src/components/pool/ActiveKeysBar.tsx` | 新增 | 活跃密钥展示组件 |
+| `frontend/src/App.tsx` | 修改 | 引入 ActiveKeysBar 组件 |
 | `Cargo.toml` | 修改 | 新增 dashmap 依赖（如未引入） |

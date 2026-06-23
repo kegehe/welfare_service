@@ -13,6 +13,7 @@ interface Props {
 export function EditPoolKeyModal({ open, poolKey, onClose, onSubmit }: Props) {
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
+  const [apiKeyVisible, setApiKeyVisible] = useState(true)
   const { ensurePresetsLoaded, getPresetModelsForPlatform } = useModelPresets()
 
   const platform = Form.useWatch('platform', form) || poolKey?.platform || 'xiaomi'
@@ -96,6 +97,7 @@ export function EditPoolKeyModal({ open, poolKey, onClose, onSubmit }: Props) {
       open={open}
       onCancel={() => {
         form.resetFields()
+        setApiKeyVisible(true)
         onClose()
       }}
       onOk={handleSubmit}
@@ -130,7 +132,10 @@ export function EditPoolKeyModal({ open, poolKey, onClose, onSubmit }: Props) {
         </Form.Item>
 
         <Form.Item name="api_key" label="API Key">
-          <Input.Password placeholder="留空则保留当前密钥" />
+          <Input.Password
+            placeholder="留空则保留当前密钥"
+            visibilityToggle={{ visible: apiKeyVisible, onVisibleChange: setApiKeyVisible }}
+          />
         </Form.Item>
 
         <Form.Item name="openai_url" label="OpenAI 兼容端点">

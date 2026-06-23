@@ -7,6 +7,7 @@ import { StatsOverview } from '@/components/overview/StatsOverview'
 import { ActiveKeysBar } from '@/components/overview/ActiveKeysBar'
 import { UsageStats } from '@/components/usage/UsageStats'
 import { PoolKeysTable } from '@/components/pool/PoolKeysTable'
+import { PoolStatsBar } from '@/components/pool/PoolStatsBar'
 import { AccessKeysTable } from '@/components/access/AccessKeysTable'
 import { ChatTest } from '@/components/chat/ChatTest'
 import { AddPoolKeyModal } from '@/components/pool/AddPoolKeyModal'
@@ -255,17 +256,24 @@ export default function App() {
       key: 'pool',
       label: '号池管理',
       children: (
-        <PoolKeysTable
-          poolKeys={poolKeys}
-          statusMap={statusMap}
-          healthScoreMap={healthScoreMap}
-          testingKeyId={testingKeyId}
-          onTest={handleTestPoolKey}
-          onAdd={() => setShowAddPoolKey(true)}
-          onEdit={handleEditPoolKey}
-          onDelete={handleDeletePoolKey}
-          onToggle={handleTogglePoolKey}
-        />
+        <>
+          <PoolStatsBar
+            poolKeys={poolKeys}
+            keyStatuses={keyStatuses}
+            healthScores={healthScores}
+          />
+          <PoolKeysTable
+            poolKeys={poolKeys}
+            statusMap={statusMap}
+            healthScoreMap={healthScoreMap}
+            testingKeyId={testingKeyId}
+            onTest={handleTestPoolKey}
+            onAdd={() => setShowAddPoolKey(true)}
+            onEdit={handleEditPoolKey}
+            onDelete={handleDeletePoolKey}
+            onToggle={handleTogglePoolKey}
+          />
+        </>
       ),
     },
     {

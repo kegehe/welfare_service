@@ -423,8 +423,9 @@ async fn forward_stream_response(
                     cancel,
                     tracker.clone(),
                     finalize_guard.clone(),
+                    false, // input_recorded
                 ),
-                |(mut upstream_stream, mut buffer, mut sanitizer, uc, pk, ak, mdl, cancel, tracker, guard)| async move {
+                |(mut upstream_stream, mut buffer, mut sanitizer, uc, pk, ak, mdl, cancel, tracker, guard, mut input_recorded)| async move {
                     loop {
                         if let Some((frame_end, separator_len)) = find_sse_frame(&buffer) {
                             let frame_bytes = buffer[..frame_end].to_vec();
@@ -432,14 +433,14 @@ async fn forward_stream_response(
 
                             // 提取 usage 并写入缓存
                             let delta = extract_and_cache_usage_from_sse_frame(
-                                &frame_bytes, Protocol::Claude, &uc, pk, ak, &mdl,
+                                &frame_bytes, Protocol::Claude, &uc, pk, ak, &mdl, &mut input_recorded,
                             );
                             tracker.add_usage(delta);
 
                             if let Some(sanitized) = sanitizer.sanitize_frame(&frame_bytes) {
                                 return Ok(Some((
                                     Bytes::from(sanitized),
-                                    (upstream_stream, buffer, sanitizer, uc, pk, ak, mdl, cancel, tracker, guard),
+                                    (upstream_stream, buffer, sanitizer, uc, pk, ak, mdl, cancel, tracker, guard, input_recorded),
                                 )));
                             }
                             continue;
@@ -464,14 +465,14 @@ async fn forward_stream_response(
 
                                         let frame_bytes = std::mem::take(&mut buffer);
                                         let delta = extract_and_cache_usage_from_sse_frame(
-                                            &frame_bytes, Protocol::Claude, &uc, pk, ak, &mdl,
+                                            &frame_bytes, Protocol::Claude, &uc, pk, ak, &mdl, &mut input_recorded,
                                         );
                                         tracker.add_usage(delta);
                                         if let Some(sanitized) = sanitizer.sanitize_frame(&frame_bytes) {
                                             tracker.mark_completed();
                                             return Ok(Some((
                                                 Bytes::from(sanitized),
-                                                (upstream_stream, buffer, sanitizer, uc, pk, ak, mdl, cancel, tracker, guard),
+                                                (upstream_stream, buffer, sanitizer, uc, pk, ak, mdl, cancel, tracker, guard, input_recorded),
                                             )));
                                         }
                                         tracker.finish(StreamEndState::Completed);
@@ -495,6 +496,7 @@ async fn forward_stream_response(
             futures::stream::try_unfold(
                 (upstream_stream, Vec::<u8>::new(), usage_cache, pool_key_id, access_key_id, model, cancel, tracker.clone(), finalize_guard.clone()),
                 |(mut upstream_stream, mut buffer, uc, pk, ak, mdl, cancel, tracker, guard)| async move {
+                    let mut _unused = false;
                     loop {
                         if let Some((frame_end, separator_len)) = find_sse_frame(&buffer) {
                             let frame_bytes = buffer[..frame_end].to_vec();
@@ -502,7 +504,7 @@ async fn forward_stream_response(
 
                             // 提取 usage 并写入缓存
                             let delta = extract_and_cache_usage_from_sse_frame(
-                                &frame_bytes, Protocol::OpenAI, &uc, pk, ak, &mdl,
+                                &frame_bytes, Protocol::OpenAI, &uc, pk, ak, &mdl, &mut _unused,
                             );
                             tracker.add_usage(delta);
 
@@ -530,7 +532,7 @@ async fn forward_stream_response(
                                         }
                                         let frame_bytes = std::mem::take(&mut buffer);
                                         let delta = extract_and_cache_usage_from_sse_frame(
-                                            &frame_bytes, Protocol::OpenAI, &uc, pk, ak, &mdl,
+                                            &frame_bytes, Protocol::OpenAI, &uc, pk, ak, &mdl, &mut _unused,
                                         );
                                         tracker.add_usage(delta);
                                         tracker.mark_completed();
@@ -569,6 +571,10 @@ async fn forward_stream_response(
 }
 
 /// 从 SSE 帧中提取 usage 信息并直接写入 UsageCache
+///
+/// `input_recorded`: 跨帧追踪 Claude 协议的 input tokens 是否已记录，
+/// 因为 message_start 和 message_delta 中可能包含相同的 input_tokens 值，
+/// 通过此标记避免双重计数。
 fn extract_and_cache_usage_from_sse_frame(
     frame_bytes: &[u8],
     protocol: Protocol,
@@ -576,6 +582,7 @@ fn extract_and_cache_usage_from_sse_frame(
     pool_key_id: i64,
     access_key_id: Option<i64>,
     model: &str,
+    input_recorded: &mut bool,
 ) -> UsageInfo {
     let frame = match String::from_utf8_lossy(frame_bytes).into_owned() {
         f if f.trim().is_empty() => return UsageInfo::default(),
@@ -636,38 +643,72 @@ fn extract_and_cache_usage_from_sse_frame(
                                 .get("input_tokens")
                                 .and_then(|v| v.as_i64())
                                 .unwrap_or(0);
-                            if input > 0 {
+                            let cache_creation = usage_obj
+                                .get("cache_creation_input_tokens")
+                                .and_then(|v| v.as_i64())
+                                .unwrap_or(0);
+                            let cache_read = usage_obj
+                                .get("cache_read_input_tokens")
+                                .and_then(|v| v.as_i64())
+                                .unwrap_or(0);
+                            let total_input = input + cache_creation + cache_read;
+                            if total_input > 0 && !*input_recorded {
+                                *input_recorded = true;
                                 usage_cache.record(
                                     pool_key_id,
                                     access_key_id,
                                     model,
-                                    input,
+                                    total_input,
                                     0,
                                     false,
                                 );
-                                total.add_prompt(input);
+                                total.add_prompt(total_input);
                                 tracing::debug!(
-                                    "SSE usage 提取 (Claude message_start): input_tokens={}",
-                                    input
+                                    "SSE usage 提取 (Claude message_start): input={}, cache_creation={}, cache_read={}, total={}",
+                                    input, cache_creation, cache_read, total_input
                                 );
                             }
                         }
                     }
                 }
 
-                // message_delta: 包含增量 output_tokens
+                // message_delta: 包含 output_tokens 和可能的 input_tokens
+                //
+                // 某些上游 API（如 xiaomimimo）在 message_start 中 input_tokens=0，
+                // 实际的 input_tokens 在 message_delta 的 usage 中返回。
+                // 通过 input_recorded 标记避免与 message_start 重复记录。
                 if event_type == Some("message_delta") {
                     if let Some(usage_obj) = value.get("usage") {
+                        let input = usage_obj
+                            .get("input_tokens")
+                            .and_then(|v| v.as_i64())
+                            .unwrap_or(0);
+                        let cache_creation = usage_obj
+                            .get("cache_creation_input_tokens")
+                            .and_then(|v| v.as_i64())
+                            .unwrap_or(0);
+                        let cache_read = usage_obj
+                            .get("cache_read_input_tokens")
+                            .and_then(|v| v.as_i64())
+                            .unwrap_or(0);
+                        let total_input = input + cache_creation + cache_read;
                         let output = usage_obj
                             .get("output_tokens")
                             .and_then(|v| v.as_i64())
                             .unwrap_or(0);
-                        if output > 0 {
-                            usage_cache.record(pool_key_id, access_key_id, model, 0, output, false);
+                        let input_delta = if total_input > 0 && !*input_recorded {
+                            *input_recorded = true;
+                            total_input
+                        } else {
+                            0
+                        };
+                        if input_delta > 0 || output > 0 {
+                            usage_cache.record(pool_key_id, access_key_id, model, input_delta, output, false);
+                            total.add_prompt(input_delta);
                             total.add_completion(output);
                             tracing::debug!(
-                                "SSE usage 提取 (Claude message_delta): output_tokens={}",
-                                output
+                                "SSE usage 提取 (Claude message_delta): input={}, cache_creation={}, cache_read={}, input_delta={}, output={}",
+                                input, cache_creation, cache_read, input_delta, output
                             );
                         }
                     }

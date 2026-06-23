@@ -4,6 +4,7 @@ import type {
   TestKeyResult, AddPoolKeyInput, UpdatePoolKeyInput,
   CreateAccessKeyInput, UpdateAccessKeyInput, CreateAccessKeyResponse,
   StatsOverview, PoolKeyStats, AccessKeyStatsResponse, HourlyStats,
+  PoolKeyStatsDetail, AccessKeyStatsDetail,
   KeyHealthScore, ModelPresetsResponse,
 } from '@/types'
 
@@ -91,6 +92,14 @@ export function getHourlyStats(dimension: 'pool' | 'access', keyId?: number, hou
   const params = new URLSearchParams({ dimension, hours: String(hours) })
   if (keyId != null) params.set('key_id', String(keyId))
   return apiFetch<{ data: HourlyStats[] }>(`/admin/stats/hourly?${params}`)
+}
+
+export function getPoolKeyStatsDetail(id: number, hours = 24) {
+  return apiFetch<PoolKeyStatsDetail>(`/admin/stats/pool-keys/${id}?hours=${hours}`)
+}
+
+export function getAccessKeyStatsDetail(id: number, hours = 24) {
+  return apiFetch<AccessKeyStatsDetail>(`/admin/stats/access-keys/${id}?hours=${hours}`)
 }
 
 // Key 健康评分

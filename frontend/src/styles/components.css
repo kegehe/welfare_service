@@ -101,6 +101,14 @@
   letter-spacing: var(--tracking-normal);
 }
 
+.pool-key-card__id {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text3);
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+
 .pool-key-card__body {
   display: flex;
   flex-direction: column;
@@ -312,6 +320,88 @@
 .health-score-grid__label--heavy_throttled { color: var(--ws-fuse); }
 .health-score-grid__label--critical { color: var(--ws-fault); }
 .health-score-grid__label--nodata { color: var(--text3); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Pool Stats Bar
+   ═══════════════════════════════════════════════════════════════════ */
+
+.stat-tags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+/* Health Distribution */
+.health-distribution {
+  padding: 4px 0;
+}
+
+.health-distribution__bar {
+  height: 20px;
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  background: #f0f0f0;
+  margin-bottom: 12px;
+}
+
+.health-bar-segment {
+  height: 100%;
+  transition: width 0.5s ease;
+  min-width: 0;
+}
+
+.health-distribution__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 13px;
+}
+
+.health-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #475569;
+}
+
+.health-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.health-pct {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+/* Supplement Stats */
+.pool-supplement-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 4px 0;
+}
+
+.supplement-item {
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+}
+
+.supplement-label {
+  color: #64748b;
+  flex: 1;
+}
+
+.supplement-value {
+  font-weight: 600;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+}
 
 /* ═══════════════════════════════════════════════════════════════════
    Section Spacing

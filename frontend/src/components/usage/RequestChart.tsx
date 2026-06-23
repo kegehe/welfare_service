@@ -11,7 +11,11 @@ interface Props {
   accessKeys?: { access_key_id: number; name: string }[]
 }
 
-export function UsageChart({ hours, poolKeys, accessKeys }: Props) {
+/**
+ * 请求量趋势折线图
+ * 利用 hourly API 返回的 request_count 字段（原有 UsageChart 忽略此字段）
+ */
+export function RequestChart({ hours, poolKeys, accessKeys }: Props) {
   const [data, setData] = useState<HourlyStats[]>([])
   const [dimension, setDimension] = useState<'pool' | 'access'>('pool')
   const [keyId, setKeyId] = useState<number | undefined>(undefined)
@@ -35,7 +39,6 @@ export function UsageChart({ hours, poolKeys, accessKeys }: Props) {
     loadData()
   }, [loadData])
 
-  // 切换维度时重置 keyId
   useEffect(() => {
     setKeyId(undefined)
   }, [dimension])
@@ -43,22 +46,17 @@ export function UsageChart({ hours, poolKeys, accessKeys }: Props) {
   const currentKeys = dimension === 'pool' ? poolKeys : accessKeys
   const keyIdField = dimension === 'pool' ? 'key_id' : 'access_key_id'
 
-  // 按小时聚合
-  const hourMap = new Map<number, { prompt: number; completion: number }>()
+  // 按小时聚合请求数
+  const hourMap = new Map<number, number>()
   for (const row of data) {
-    const existing = hourMap.get(row.hour_bucket) || { prompt: 0, completion: 0 }
-    existing.prompt += row.prompt_tokens
-    existing.completion += row.completion_tokens
-    hourMap.set(row.hour_bucket, existing)
+    hourMap.set(row.hour_bucket, (hourMap.get(row.hour_bucket) || 0) + row.request_count)
   }
 
   const hoursList = [...hourMap.keys()].sort()
-  const promptData = hoursList.map(h => hourMap.get(h)!.prompt)
-  const completionData = hoursList.map(h => hourMap.get(h)!.completion)
+  const requestData = hoursList.map(h => hourMap.get(h)!)
   const labels = hoursList.map(h => {
     const d = new Date(h * 3600 * 1000)
     if (isMultiDay) {
-      // 多日视图显示日期+小时
       const month = String(d.getMonth() + 1).padStart(2, '0')
       const day = String(d.getDate()).padStart(2, '0')
       const hr = String(d.getHours()).padStart(2, '0')
@@ -67,13 +65,6 @@ export function UsageChart({ hours, poolKeys, accessKeys }: Props) {
     return `${String(d.getHours()).padStart(2, '0')}:00`
   })
 
-  const formatTokens = (value: number) => {
-    if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`
-    if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`
-    return String(value)
-  }
-
-  // 多日视图时，只显示部分标签避免拥挤
   const axisLabelInterval = isMultiDay
     ? Math.max(0, Math.floor(hoursList.length / 20) - 1)
     : 'auto'
@@ -81,20 +72,20 @@ export function UsageChart({ hours, poolKeys, accessKeys }: Props) {
   const option = {
     tooltip: {
       trigger: 'axis' as const,
-      axisPointer: { type: 'shadow' as const },
+      axisPointer: { type: 'cross' as const },
       formatter(params: any) {
         const items = Array.isArray(params) ? params : [params]
         let html = `<div style="font-weight:600;margin-bottom:4px">${items[0]?.axisValue}</div>`
         for (const item of items) {
-          html += `<div>${item.marker} ${item.seriesName}: <b>${formatTokens(item.value)}</b></div>`
+          html += `<div>${item.marker} ${item.seriesName}: <b>${item.value.toLocaleString()}</b></div>`
         }
         return html
-      }
+      },
     },
     legend: {
-      data: ['输入 Tokens', '输出 Tokens'],
+      data: ['请求数'],
       top: 0,
-      textStyle: { fontSize: 11 }
+      textStyle: { fontSize: 11 },
     },
     grid: { left: 56, right: 16, top: 32, bottom: 40 },
     xAxis: {
@@ -114,26 +105,29 @@ export function UsageChart({ hours, poolKeys, accessKeys }: Props) {
       axisLabel: {
         fontSize: 10,
         color: '#999',
-        formatter: (v: number) => formatTokens(v)
       },
       splitLine: { lineStyle: { color: '#f5f5f5' } },
     },
     series: [
       {
-        name: '输入 Tokens',
-        type: 'bar' as const,
-        stack: 'total',
-        data: promptData,
-        itemStyle: { color: COLORS.pool },
-        barMaxWidth: isMultiDay ? 12 : 24,
-      },
-      {
-        name: '输出 Tokens',
-        type: 'bar' as const,
-        stack: 'total',
-        data: completionData,
-        itemStyle: { color: COLORS.signal },
-        barMaxWidth: isMultiDay ? 12 : 24,
+        name: '请求数',
+        type: 'line' as const,
+        data: requestData,
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 6,
+        lineStyle: { width: 2.5, color: COLORS.trace },
+        itemStyle: { color: COLORS.trace },
+        areaStyle: {
+          color: {
+            type: 'linear' as const,
+            x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [
+              { offset: 0, color: 'rgba(139, 92, 246, 0.25)' },
+              { offset: 1, color: 'rgba(139, 92, 246, 0.02)' },
+            ],
+          },
+        },
       },
     ],
   }

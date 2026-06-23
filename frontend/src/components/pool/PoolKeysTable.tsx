@@ -44,7 +44,7 @@ const sortOptions = [
 
 export function PoolKeysTable({ poolKeys, statusMap, healthScoreMap, testingKeyId, onTest, onAdd, onEdit, onDelete, onToggle }: Props) {
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card')
-  const [sortBy, setSortBy] = useState<SortBy>('id')
+  const [sortBy, setSortBy] = useState<SortBy>('health_score')
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc')
   const copyText = useCopyText()
 
@@ -269,6 +269,7 @@ function PoolKeyCard({ poolKey, status, healthScore, testing, onEdit, onDelete, 
         <div className="pool-key-card__header">
           <Tag color={getPlatformColorHex(poolKey.platform)}>{getPlatformLabel(poolKey.platform)}</Tag>
           <span className="pool-key-card__name">{poolKey.name || poolKey.key_prefix || `Key #${poolKey.id}`}</span>
+          {(poolKey.name || poolKey.key_prefix) && <span className="pool-key-card__id">#{poolKey.id}</span>}
         </div>
       }
       extra={

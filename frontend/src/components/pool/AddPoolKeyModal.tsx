@@ -13,6 +13,7 @@ interface Props {
 export function AddPoolKeyModal({ open, onClose, onSubmit }: Props) {
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
+  const [apiKeyVisible, setApiKeyVisible] = useState(true)
   const { ensurePresetsLoaded, getPresetModelsForPlatform } = useModelPresets()
 
   const platform = Form.useWatch('platform', form) || 'xiaomi'
@@ -104,6 +105,7 @@ export function AddPoolKeyModal({ open, onClose, onSubmit }: Props) {
       open={open}
       onCancel={() => {
         form.resetFields()
+        setApiKeyVisible(true)
         onClose()
       }}
       onOk={handleSubmit}
@@ -133,7 +135,10 @@ export function AddPoolKeyModal({ open, onClose, onSubmit }: Props) {
         </Form.Item>
 
         <Form.Item name="api_key" label="API Key" rules={[{ required: true, message: '请输入 API Key' }]}>
-          <Input.Password placeholder="sk-..." />
+          <Input.Password
+            placeholder="sk-..."
+            visibilityToggle={{ visible: apiKeyVisible, onVisibleChange: setApiKeyVisible }}
+          />
         </Form.Item>
 
         <Form.Item name="openai_url" label="OpenAI 兼容端点">

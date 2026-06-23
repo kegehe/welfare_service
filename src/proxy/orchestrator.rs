@@ -278,7 +278,7 @@ pub async fn handle_proxy_request(
     }
 
     let selector = KeySelector::new(&state);
-    let candidates = selector.candidates(&model, protocol, has_tools)?;
+    let candidates = selector.candidates(&model, protocol)?;
     let mut last_error: Option<AppError> = None;
     let mut skipped_by_local_limit = 0usize;
     let mut forwarded_attempts = 0usize;
@@ -302,11 +302,12 @@ pub async fn handle_proxy_request(
             body.clone()
         } else {
             tracing::info!(
-                "模型自动映射: requested_model={} -> upstream_model={} (key_id={}, exact_match={})",
+                "模型自动映射: requested_model={} -> upstream_model={} (key_id={}, exact_match={}, has_tools={})",
                 model,
                 candidate.upstream_model,
                 key.id,
-                candidate.matched_requested_model
+                candidate.matched_requested_model,
+                has_tools
             );
             request_body_with_model(&request, &candidate.upstream_model)?
         };

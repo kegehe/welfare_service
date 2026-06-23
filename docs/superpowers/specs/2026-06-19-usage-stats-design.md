@@ -307,9 +307,9 @@ CREATE INDEX IF NOT EXISTS idx_usage_hourly_model ON usage_hourly(model);
 
 ### 新增组件
 
-1. **UsageStats.vue** — 统计主容器，包含时间范围选择器、子组件编排
-2. **UsageTable.vue** — 可复用用量排行表格（号池/访问 Key 各调用一次）
-3. **UsageChart.vue** — ECharts 小时级趋势图表，支持筛选号池 Key 和模型
+1. **UsageStats.tsx** — 统计主容器，包含时间范围选择器、子组件编排
+2. **UsageTable.tsx** — 可复用用量排行表格（号池/访问 Key 各调用一次）
+3. **UsageChart.tsx** — ECharts 小时级趋势图表，支持筛选号池 Key 和模型
 
 ### 图表特性
 
@@ -338,16 +338,16 @@ CREATE INDEX IF NOT EXISTS idx_usage_hourly_model ON usage_hourly(model);
 | `src/server/routes.rs` | 修改 | 新增 6 个统计路由 |
 | `src/server/handlers/admin.rs` | 修改 | 新增统计 handler |
 
-### Vue 前端
+### React 前端
 
 | 文件 | 改动类型 | 说明 |
 |------|----------|------|
 | `frontend/src/types/index.ts` | 修改 | 新增统计相关类型 |
 | `frontend/src/api/admin.ts` | 修改 | 新增统计 API 调用 |
-| `frontend/src/App.vue` | 修改 | 引入 UsageStats 组件 |
-| 新增 `frontend/src/components/UsageStats.vue` | 新增 | 统计主容器 |
-| 新增 `frontend/src/components/UsageTable.vue` | 新增 | 用量排行表格 |
-| 新增 `frontend/src/components/UsageChart.vue` | 新增 | 趋势图表 |
+| `frontend/src/App.tsx` | 修改 | 引入 UsageStats 组件 |
+| 新增 `frontend/src/components/usage/UsageStats.tsx` | 新增 | 统计主容器 |
+| 新增 `frontend/src/components/usage/UsageTable.tsx` | 新增 | 用量排行表格 |
+| 新增 `frontend/src/components/usage/UsageChart.tsx` | 新增 | 趋势图表 |
 
 ### 无需改动
 

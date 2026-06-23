@@ -1,7 +1,4 @@
 /target
-/data/*.db
-/data/*.db-wal
-/data/*.db-shm
 /config.toml
 *.log
 
@@ -20,14 +17,6 @@
 # Frontend
 /frontend/node_modules/
 /frontend/dist/
-/frontend-vue/node_modules/
-/frontend-vue/dist/
-/frontend-vue/data/
-
-# Database
-*.db
-*.db-shm
-*.db-wal
 
 # Build artifacts
 /static/index.html

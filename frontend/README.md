@@ -94,31 +94,6 @@ frontend/
 └── vite.config.ts
 ```
 
-## 从 Vue 迁移
-
-本项目是从 Vue 3 + Element Plus 完整重构为 React + Ant Design。
-
-### 迁移对照表
-
-| Vue 模式 | React 等价 |
-|----------|------------|
-| `ref(value)` | `useState(value)` |
-| `computed(() => ...)` | `useMemo(() => [...deps], [...deps])` |
-| `watch(source, cb)` | `useEffect(() => cb(), [source])` |
-| `onMounted(fn)` | `useEffect(fn, [])` |
-| `provide/inject` | React Context / Zustand |
-| `v-model` | `value` + `onChange` |
-| `el-tabs` | Ant Design `Tabs` |
-| `el-dialog` | Ant Design `Modal` |
-| `el-table` | Ant Design `Table` |
-
-### 可复用部分
-
-- ✅ TypeScript 类型定义（`types/index.ts`）
-- ✅ API 调用层（`api/` 目录）
-- ✅ CSS 变量设计系统（`variables.css`）
-- ✅ 业务逻辑核心
-
 ## 依赖说明
 
 - **Ant Design**: 成熟的 UI 组件库，中文生态好
