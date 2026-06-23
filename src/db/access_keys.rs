@@ -4,6 +4,27 @@ use super::models::{AccessKeyRecord, CreateAccessKeyInput, UpdateAccessKeyInput}
 use crate::db::Database;
 use crate::error::Result;
 
+/// 从行中读取 AccessKeyRecord（所有查询共用）
+fn read_access_key_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AccessKeyRecord> {
+    Ok(AccessKeyRecord {
+        id: row.get(0)?,
+        key: row.get(1)?,
+        name: row.get(2)?,
+        status: row.get(3)?,
+        rpm_limit: row.get(4)?,
+        tpm_limit: row.get(5)?,
+        expires_at: row.get(6)?,
+        last_used_at: row.get(7)?,
+        total_requests: row.get(8).unwrap_or(0),
+        total_prompt_tokens: row.get(9).unwrap_or(0),
+        total_completion_tokens: row.get(10).unwrap_or(0),
+        created_at: row.get(11)?,
+        updated_at: row.get(12)?,
+    })
+}
+
+const ACCESS_KEY_COLUMNS: &str = "id, key, name, status, rpm_limit, tpm_limit, expires_at, last_used_at, total_requests, total_prompt_tokens, total_completion_tokens, created_at, updated_at";
+
 impl Database {
     /// 添加一个新的访问 Key
     pub fn add_access_key(&self, key: &str, input: &CreateAccessKeyInput) -> Result<i64> {
@@ -33,55 +54,27 @@ impl Database {
     pub fn get_access_key_by_key(&self, key: &str) -> Result<AccessKeyRecord> {
         let conn = self.conn();
         let mut stmt = conn.prepare(
-            "SELECT id, key, name, status, rpm_limit, tpm_limit, expires_at, last_used_at, created_at, updated_at
-             FROM access_keys WHERE key = ?1",
+            &format!("SELECT {} FROM access_keys WHERE key = ?1", ACCESS_KEY_COLUMNS),
         )?;
 
-        stmt.query_row(params![key], |row| {
-            Ok(AccessKeyRecord {
-                id: row.get(0)?,
-                key: row.get(1)?,
-                name: row.get(2)?,
-                status: row.get(3)?,
-                rpm_limit: row.get(4)?,
-                tpm_limit: row.get(5)?,
-                expires_at: row.get(6)?,
-                last_used_at: row.get(7)?,
-                created_at: row.get(8)?,
-                updated_at: row.get(9)?,
+        stmt.query_row(params![key], read_access_key_row)
+            .map_err(|e| match e {
+                rusqlite::Error::QueryReturnedNoRows => {
+                    crate::error::AppError::Unauthorized("无效的 API Key".to_string())
+                }
+                other => crate::error::AppError::Database(other),
             })
-        })
-        .map_err(|e| match e {
-            rusqlite::Error::QueryReturnedNoRows => {
-                crate::error::AppError::Unauthorized("无效的 API Key".to_string())
-            }
-            other => crate::error::AppError::Database(other),
-        })
     }
 
     /// 获取所有访问 Key
     pub fn get_all_access_keys(&self) -> Result<Vec<AccessKeyRecord>> {
         let conn = self.conn();
         let mut stmt = conn.prepare(
-            "SELECT id, key, name, status, rpm_limit, tpm_limit, expires_at, last_used_at, created_at, updated_at
-             FROM access_keys ORDER BY id",
+            &format!("SELECT {} FROM access_keys ORDER BY id", ACCESS_KEY_COLUMNS),
         )?;
 
         let keys = stmt
-            .query_map([], |row| {
-                Ok(AccessKeyRecord {
-                    id: row.get(0)?,
-                    key: row.get(1)?,
-                    name: row.get(2)?,
-                    status: row.get(3)?,
-                    rpm_limit: row.get(4)?,
-                    tpm_limit: row.get(5)?,
-                    expires_at: row.get(6)?,
-                    last_used_at: row.get(7)?,
-                    created_at: row.get(8)?,
-                    updated_at: row.get(9)?,
-                })
-            })?
+            .query_map([], read_access_key_row)?
             .collect::<std::result::Result<Vec<_>, _>>()?;
 
         Ok(keys)
@@ -142,27 +135,34 @@ impl Database {
     pub fn get_active_access_keys(&self) -> Result<Vec<AccessKeyRecord>> {
         let conn = self.conn();
         let mut stmt = conn.prepare(
-            "SELECT id, key, name, status, rpm_limit, tpm_limit, expires_at, last_used_at, created_at, updated_at
-             FROM access_keys WHERE status = 'active'",
+            &format!("SELECT {} FROM access_keys WHERE status = 'active'", ACCESS_KEY_COLUMNS),
         )?;
 
         let keys = stmt
-            .query_map([], |row| {
-                Ok(AccessKeyRecord {
-                    id: row.get(0)?,
-                    key: row.get(1)?,
-                    name: row.get(2)?,
-                    status: row.get(3)?,
-                    rpm_limit: row.get(4)?,
-                    tpm_limit: row.get(5)?,
-                    expires_at: row.get(6)?,
-                    last_used_at: row.get(7)?,
-                    created_at: row.get(8)?,
-                    updated_at: row.get(9)?,
-                })
-            })?
+            .query_map([], read_access_key_row)?
             .collect::<std::result::Result<Vec<_>, _>>()?;
 
         Ok(keys)
+    }
+
+    /// 增量更新访问 Key 的累计统计字段 (供外部直接调用)
+    #[allow(dead_code)]
+    pub fn increment_access_key_totals(
+        &self,
+        id: i64,
+        requests: i64,
+        prompt_tokens: i64,
+        completion_tokens: i64,
+    ) -> Result<()> {
+        let conn = self.conn();
+        conn.execute(
+            "UPDATE access_keys
+             SET total_requests = total_requests + ?1,
+                 total_prompt_tokens = total_prompt_tokens + ?2,
+                 total_completion_tokens = total_completion_tokens + ?3
+             WHERE id = ?4",
+            params![requests, prompt_tokens, completion_tokens, id],
+        )?;
+        Ok(())
     }
 }

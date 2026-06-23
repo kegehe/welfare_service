@@ -1,7 +1,10 @@
 pub mod access_keys;
+pub mod health_score;
 pub mod keys;
 pub mod logs;
 pub mod models;
+pub mod runtime_state;
+pub mod usage;
 
 use parking_lot::Mutex;
 use rusqlite::Connection;
@@ -107,6 +110,24 @@ impl Database {
             );
 
             CREATE INDEX IF NOT EXISTS idx_access_keys_status ON access_keys(status);
+
+            CREATE TABLE IF NOT EXISTS usage_hourly (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                dimension         TEXT NOT NULL,
+                key_id            INTEGER NOT NULL,
+                model             TEXT NOT NULL,
+                hour_bucket       INTEGER NOT NULL,
+                request_count     INTEGER DEFAULT 0,
+                prompt_tokens     INTEGER DEFAULT 0,
+                completion_tokens INTEGER DEFAULT 0,
+                created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(dimension, key_id, model, hour_bucket)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_usage_hourly_dimension_key ON usage_hourly(dimension, key_id);
+            CREATE INDEX IF NOT EXISTS idx_usage_hourly_hour ON usage_hourly(hour_bucket);
+            CREATE INDEX IF NOT EXISTS idx_usage_hourly_model ON usage_hourly(model);
             ",
         )?;
 
@@ -161,12 +182,63 @@ impl Database {
             "UPDATE request_logs
              SET affects_key_health = 0
              WHERE status_code BETWEEN 400 AND 499
-               AND status_code NOT IN (401, 403)",
+               AND status_code NOT IN (401, 403, 429)",
             [],
         );
 
         // 确保 key_hash 唯一索引存在 (放在迁移之后，兼容新旧数据库)
         let _ = conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_api_keys_key_hash ON api_keys(key_hash) WHERE key_hash != ''", []);
+
+        // 迁移: 为 request_logs 添加访问 Key ID 和 token 用量字段
+        let has_access_key_id: bool = conn
+            .prepare("SELECT COUNT(*) FROM pragma_table_info('request_logs') WHERE name='access_key_id'")
+            .and_then(|mut stmt| stmt.query_row([], |row| row.get::<_, i64>(0)))
+            .unwrap_or(0)
+            > 0;
+
+        if !has_access_key_id {
+            let _ = conn.execute("ALTER TABLE request_logs ADD COLUMN access_key_id INTEGER", []);
+            tracing::info!("数据库迁移: 已添加 request_logs.access_key_id 列");
+        }
+
+        let has_prompt_tokens: bool = conn
+            .prepare("SELECT COUNT(*) FROM pragma_table_info('request_logs') WHERE name='prompt_tokens'")
+            .and_then(|mut stmt| stmt.query_row([], |row| row.get::<_, i64>(0)))
+            .unwrap_or(0)
+            > 0;
+
+        if !has_prompt_tokens {
+            let _ = conn.execute("ALTER TABLE request_logs ADD COLUMN prompt_tokens INTEGER DEFAULT 0", []);
+            tracing::info!("数据库迁移: 已添加 request_logs.prompt_tokens 列");
+        }
+
+        let has_completion_tokens: bool = conn
+            .prepare("SELECT COUNT(*) FROM pragma_table_info('request_logs') WHERE name='completion_tokens'")
+            .and_then(|mut stmt| stmt.query_row([], |row| row.get::<_, i64>(0)))
+            .unwrap_or(0)
+            > 0;
+
+        if !has_completion_tokens {
+            let _ = conn.execute("ALTER TABLE request_logs ADD COLUMN completion_tokens INTEGER DEFAULT 0", []);
+            tracing::info!("数据库迁移: 已添加 request_logs.completion_tokens 列");
+        }
+
+        // 迁移: 为 access_keys 添加累计统计字段
+        let has_total_requests: bool = conn
+            .prepare("SELECT COUNT(*) FROM pragma_table_info('access_keys') WHERE name='total_requests'")
+            .and_then(|mut stmt| stmt.query_row([], |row| row.get::<_, i64>(0)))
+            .unwrap_or(0)
+            > 0;
+
+        if !has_total_requests {
+            let _ = conn.execute("ALTER TABLE access_keys ADD COLUMN total_requests INTEGER DEFAULT 0", []);
+            let _ = conn.execute("ALTER TABLE access_keys ADD COLUMN total_prompt_tokens INTEGER DEFAULT 0", []);
+            let _ = conn.execute("ALTER TABLE access_keys ADD COLUMN total_completion_tokens INTEGER DEFAULT 0", []);
+            tracing::info!("数据库迁移: 已添加 access_keys 累计统计字段");
+        }
+
+        // 迁移: 为 request_logs 添加 access_key_id 索引
+        let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_request_logs_access_key_id ON request_logs(access_key_id)", []);
 
         Ok(())
     }

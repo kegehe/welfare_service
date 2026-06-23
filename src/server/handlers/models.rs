@@ -15,7 +15,10 @@ pub async fn list_models(
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, AppError> {
     // 验证访问 Key (模型列表也需要认证)
-    crate::proxy::orchestrator::verify_access_key(&headers, &state, 0)?;
+    let access_check = crate::proxy::orchestrator::verify_access_key(&headers, &state, 0)?;
+    if let Some(error) = access_check.failure {
+        return Err(error);
+    }
 
     let keys = state.db.get_active_keys()?;
 

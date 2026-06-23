@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::path::Path;
 
 use crate::error::{AppError, Result};
@@ -14,6 +15,7 @@ pub struct Config {
     pub rate_limit: RateLimitConfig,
     pub circuit_breaker: CircuitBreakerConfig,
     pub proxy: ProxyConfig,
+    pub models: ModelsConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -79,7 +81,42 @@ fn default_rate_limit_cooldown_secs() -> u64 {
 }
 
 /// 支持的平台列表
-pub const VALID_PLATFORMS: &[&str] = &["xiaomi", "iflytek"];
+pub const VALID_PLATFORMS: &[&str] = &["xiaomi", "iflytek", "anthropic"];
+
+/// 模型预设配置
+#[derive(Debug, Clone, Deserialize)]
+pub struct ModelsConfig {
+    /// 每个平台预设的模型名称列表。Key = 平台名, Value = 模型名列表。
+    #[serde(default)]
+    pub presets: HashMap<String, Vec<String>>,
+}
+
+impl Default for ModelsConfig {
+    fn default() -> Self {
+        let mut presets = HashMap::new();
+        presets.insert(
+            "xiaomi".to_string(),
+            vec!["mimo-v2.5-pro".to_string(), "astron-code-latest".to_string()],
+        );
+        presets.insert(
+            "iflytek".to_string(),
+            vec![
+                "spark-v4-ultra".to_string(),
+                "spark-v3.5".to_string(),
+                "spark-v3".to_string(),
+            ],
+        );
+        presets.insert(
+            "anthropic".to_string(),
+            vec![
+                "claude-sonnet-4-6".to_string(),
+                "claude-opus-4-8".to_string(),
+                "claude-haiku-3-5".to_string(),
+            ],
+        );
+        Self { presets }
+    }
+}
 
 impl Config {
     /// 从文件加载配置
@@ -140,6 +177,7 @@ impl Default for Config {
                 rate_limit_cooldown_secs: default_rate_limit_cooldown_secs(),
                 pool_size: 100,
             },
+            models: ModelsConfig::default(),
         }
     }
 }

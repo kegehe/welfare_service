@@ -23,7 +23,7 @@ pub enum Commands {
 
     /// 添加 API Key
     AddKey {
-        /// 平台名称 (xiaomi / iflytek)
+        /// 平台名称 (xiaomi / iflytek / anthropic)
         #[arg(short, long)]
         platform: String,
 

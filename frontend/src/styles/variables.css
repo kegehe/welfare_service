@@ -1,11 +1,22 @@
-/* === Welfare Service Design System === */
+/* ═══════════════════════════════════════════════════════════════════
+   Welfare Service — 「信号协议」Signal Protocol Design System
+   玻璃光感现代 · Glass & Light Modern
+   ═══════════════════════════════════════════════════════════════════ */
 
 :root {
-  /* ── Brand Colors ── */
-  --ws-pool: #0d9488;
-  --ws-pool-rgb: 13, 148, 136;
-  --ws-pool-light: #14b8a6;
-  --ws-pool-dark: #0f766e;
+  /* ── Palette: Signal Flow ── */
+  --ws-flow: #06b6d4;
+  --ws-flow-rgb: 6, 182, 212;
+  --ws-flow-light: #22d3ee;
+  --ws-flow-dark: #0891b2;
+
+  --ws-trace: #8b5cf6;
+  --ws-trace-rgb: 139, 92, 246;
+  --ws-trace-light: #a78bfa;
+  --ws-trace-dark: #7c3aed;
+
+  --ws-lime: #84cc16;
+  --ws-lime-rgb: 132, 204, 22;
 
   --ws-signal: #22c55e;
   --ws-signal-rgb: 34, 197, 94;
@@ -22,157 +33,184 @@
   --ws-fault-light: #f87171;
   --ws-fault-dark: #dc2626;
 
-  --ws-conduit: #334155;
-  --ws-conduit-rgb: 51, 65, 85;
-  --ws-conduit-light: #475569;
-  --ws-conduit-dark: #1e293b;
+  --ws-conduit: #1e293b;
+  --ws-conduit-rgb: 30, 41, 59;
+  --ws-conduit-light: #334155;
+  --ws-conduit-dark: #0f172a;
 
-  --ws-channel: #e2e8f0;
-  --ws-channel-rgb: 226, 232, 240;
+  --ws-channel: #cbd5e1;
+  --ws-channel-rgb: 203, 213, 225;
 
-  /* ── Element Plus Theme Override ── */
-  --el-color-primary: #0d9488;
-  --el-color-primary-rgb: 13, 148, 136;
-  --el-color-primary-light-3: #4db8ac;
-  --el-color-primary-light-5: #86d4cc;
-  --el-color-primary-light-7: #bfe9e3;
-  --el-color-primary-light-8: #d9f2ee;
-  --el-color-primary-light-9: #ecf9f7;
-  --el-color-primary-dark-2: #0a7a70;
-
-  --el-color-success: #22c55e;
-  --el-color-success-rgb: 34, 197, 94;
-  --el-color-success-light-3: #6ad98e;
-  --el-color-success-light-5: #95e5ab;
-  --el-color-success-light-7: #bff1c8;
-  --el-color-success-light-8: #d5f7db;
-  --el-color-success-light-9: #ecfced;
-  --el-color-success-dark-2: #1b9e4b;
-
-  --el-color-warning: #f59e0b;
-  --el-color-warning-rgb: 245, 158, 11;
-  --el-color-warning-light-3: #f8c04a;
-  --el-color-warning-light-5: #fad37c;
-  --el-color-warning-light-7: #fce6ae;
-  --el-color-warning-light-8: #fdf0c9;
-  --el-color-warning-light-9: #fef9e8;
-  --el-color-warning-dark-2: #c47e09;
-
-  --el-color-danger: #ef4444;
-  --el-color-danger-rgb: 239, 68, 68;
-  --el-color-danger-light-3: #f37c7c;
-  --el-color-danger-light-5: #f6a4a4;
-  --el-color-danger-light-7: #f9cdcd;
-  --el-color-danger-light-8: #fbe0e0;
-  --el-color-danger-light-9: #fef2f2;
-  --el-color-danger-dark-2: #bf3636;
-
-  --el-color-info: #64748b;
-  --el-color-info-rgb: 100, 116, 139;
-  --el-color-info-light-3: #8c9bab;
-  --el-color-info-light-5: #b3becb;
-  --el-color-info-light-7: #d9dfe6;
-  --el-color-info-light-8: #e8ecf0;
-  --el-color-info-light-9: #f5f7f9;
-  --el-color-info-dark-2: #505d70;
-
-  /* ── EP Surface Overrides ── */
-  --el-bg-color: #ffffff;
-  --el-bg-color-page: #f8fafc;
-  --el-bg-color-overlay: #ffffff;
-  --el-border-color: #e2e8f0;
-  --el-border-color-light: #f1f5f9;
-  --el-border-color-lighter: #f8fafc;
-  --el-border-color-extra-light: #f8fafc;
-  --el-border-color-dark: #cbd5e1;
-  --el-border-color-darker: #94a3b8;
-  --el-fill-color: #f1f5f9;
-  --el-fill-color-light: #f8fafc;
-  --el-fill-color-lighter: #fafbfc;
-  --el-fill-color-extra-light: #fafbfc;
-  --el-fill-color-dark: #e2e8f0;
-  --el-fill-color-darker: #cbd5e1;
-
-  /* ── EP Border Radius Override ── */
-  --el-border-radius-base: 6px;
-  --el-border-radius-small: 4px;
-  --el-border-radius-round: 16px;
-
-  /* ── Application Variables ── */
-  --bg: #f8fafc;
+  /* ── Application Surfaces ── */
+  --bg: #f8fafb;
   --card: #ffffff;
   --border: #e2e8f0;
-  --primary: #0d9488;
+
+  /* ── Semantic Tokens ── */
+  --primary: #06b6d4;
+  --primary-rgb: 6, 182, 212;
   --success: #22c55e;
   --warning: #f59e0b;
   --danger: #ef4444;
   --info: #64748b;
-  --text: #1e293b;
+  --accent: #8b5cf6;
+  --accent-rgb: 139, 92, 246;
+
+  /* ── Text ── */
+  --text: #0f172a;
   --text2: #475569;
   --text3: #94a3b8;
-  --radius: 6px;
 
   /* ── Key Display ── */
-  --key-bg: #f0fdfa;
-  --key-border: #99f6e4;
-  --key-hover-bg: #ccfbf1;
+  --key-bg: #ecfeff;
+  --key-border: #a5f3fc;
+  --key-hover-bg: #cffafe;
 
   /* ── Surfaces ── */
   --surface-muted: #f1f5f9;
-  --header-text: #f8fafc;
-  --on-pool-text: #f0fdfa;
-  --on-conduit-text: #e2e8f0;
+  --header-text: #ffffff;
+
+  /* ── System Blue (chat system messages) ── */
+  --system-blue: #3b82f6;
+  --system-blue-light: #eff6ff;
+  --system-blue-border: #bfdbfe;
+
+  /* ── Chat Colors ── */
+  --chat-user-bg: #ecfeff;
+  --chat-user-border: #a5f3fc;
+  --chat-assistant-bg: #ffffff;
+  --chat-assistant-border: #e2e8f0;
+  --chat-system-bg: #eff6ff;
+  --chat-system-border: #bfdbfe;
+  --chat-error-bg: #fef2f2;
+  --chat-error-border: #fecaca;
+  --chat-thinking-bg: #f8fafc;
+  --chat-thinking-text: #64748b;
+  --chat-container-bg: #f8fafb;
+  --chat-container-border: #e2e8f0;
+
+  /* ── Aurora Gradient States ── */
+  --aurora-healthy: linear-gradient(135deg, #06b6d4 0%, #0891b2 50%, #0e7490 100%);
+  --aurora-warning: linear-gradient(135deg, #06b6d4 0%, #8b5cf6 40%, #f59e0b 100%);
+  --aurora-critical: linear-gradient(135deg, #06b6d4 0%, #8b5cf6 30%, #ef4444 80%);
+
+  /* ── Glass Card Effects ── */
+  --glass-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --glass-shadow-hover: 0 4px 6px rgba(0, 0, 0, 0.04), 0 12px 24px rgba(0, 0, 0, 0.06);
+  --glass-border: 1px solid rgba(226, 232, 240, 0.8);
+
+  /* ── Scrollbar ── */
+  --scrollbar-track: #f1f5f9;
+  --scrollbar-thumb: #cbd5e1;
+  --scrollbar-thumb-hover: #94a3b8;
+
+  /* ── Spacing Scale (4px base) ── */
+  --space-1: 4px;
+  --space-1-5: 6px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* ── Shadow Scale (glass-oriented) ── */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.04), 0 2px 4px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.04), 0 4px 6px rgba(0, 0, 0, 0.04);
+  --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.05), 0 8px 10px rgba(0, 0, 0, 0.04);
+  --shadow-focus: 0 0 0 3px rgba(var(--ws-flow-rgb), 0.35);
+
+  /* ── Elevation ── */
+  --elevation-0: none;
+  --elevation-1: var(--shadow-sm);
+  --elevation-2: var(--shadow-md);
+  --elevation-3: var(--shadow-lg);
+
+  /* ── Border Radius ── */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-full: 9999px;
 
   /* ── Typography ── */
-  --font-mono: "JetBrains Mono", "Fira Code", "SF Mono", "Cascadia Code", ui-monospace, monospace;
+  --font-display: "Space Grotesk", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", Roboto, "Helvetica Neue", sans-serif;
+  --font-mono: "SF Mono", "JetBrains Mono", "Fira Code", "Cascadia Code", ui-monospace, monospace;
 
-  --text-xs: 0.6875rem;
-  --text-sm: 0.75rem;
-  --text-base: 0.875rem;
-  --text-lg: 1rem;
-  --text-xl: 1.25rem;
-  --text-2xl: 1.5rem;
+  /* ── Type Scale (1.25 ratio) ── */
+  --text-2xs: 0.625rem;   /* 10px — captions, micro labels */
+  --text-xs: 0.75rem;     /* 12px */
+  --text-sm: 0.8125rem;   /* 13px — body small */
+  --text-base: 0.875rem;  /* 14px — body */
+  --text-lg: 1rem;        /* 16px — card titles, large body */
+  --text-xl: 1.25rem;     /* 20px — section headings */
+  --text-2xl: 1.5rem;     /* 24px — page titles */
+  --text-3xl: 2rem;       /* 32px — hero */
 
   --weight-regular: 400;
   --weight-medium: 500;
   --weight-semibold: 600;
   --weight-bold: 700;
-}
 
-body {
-  font-family: "Inter", "SF Pro Text", -apple-system, BlinkMacSystemFont,
-    "Segoe UI", "Noto Sans SC", Roboto, "Helvetica Neue", sans-serif;
-  background: var(--bg);
-  color: var(--text);
-  line-height: 1.6;
-  margin: 0;
+  /* ── Line Height ── */
+  --leading-tight: 1.2;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.6;
+
+  /* ── Letter Spacing ── */
+  --tracking-tight: -0.02em;
+  --tracking-normal: -0.01em;
+  --tracking-wide: 0.02em;
+  --tracking-mono: 0.04em;
+
+  /* ── Transitions ── */
+  --transition-fast: 150ms ease;
+  --transition-normal: 250ms ease;
+  --transition-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-aurora: 800ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* ── Shared Layout Classes ── */
 .section-card {
-  margin-bottom: 24px;
+  margin-bottom: var(--space-8);
+}
+
+.section-card + .section-card {
+  margin-top: var(--space-8);
 }
 
 .card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  margin-bottom: var(--space-5);
 }
 
 .card-title {
-  font-size: var(--text-lg);
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
   font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-normal);
+  color: var(--text);
 }
 
 .card-desc {
   font-size: var(--text-sm);
   color: var(--text3);
-  margin-left: 12px;
+  font-family: var(--font-mono);
+  letter-spacing: var(--tracking-mono);
+  margin-left: var(--space-3);
 }
 
-/* ── Form Controls Full Width ── */
-.el-form-item .el-select,
-.el-form-item .el-input-number,
-.el-form-item .el-date-editor {
+/* ── Ant Design Form Controls Full Width ── */
+.ant-form-item .ant-select,
+.ant-form-item .ant-input-number,
+.ant-form-item .ant-picker {
   width: 100%;
 }

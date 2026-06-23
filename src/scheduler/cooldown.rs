@@ -44,6 +44,34 @@ impl RateLimitCooldown {
     pub fn unregister(&self, key_id: i64) {
         self.entries.write().remove(&key_id);
     }
+
+    pub fn snapshot_remaining_secs(&self) -> Vec<(i64, u64)> {
+        let now = Instant::now();
+        let mut expired = Vec::new();
+        let snapshot = {
+            let entries = self.entries.read();
+            entries
+                .iter()
+                .filter_map(|(key_id, until)| {
+                    if *until <= now {
+                        expired.push(*key_id);
+                        None
+                    } else {
+                        Some((*key_id, (*until - now).as_secs().max(1)))
+                    }
+                })
+                .collect::<Vec<_>>()
+        };
+
+        if !expired.is_empty() {
+            let mut entries = self.entries.write();
+            for key_id in expired {
+                entries.remove(&key_id);
+            }
+        }
+
+        snapshot
+    }
 }
 
 #[cfg(test)]

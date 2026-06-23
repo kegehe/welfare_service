@@ -2,6 +2,23 @@ pub mod forwarder;
 pub mod orchestrator;
 pub mod stream;
 
+/// 从上游响应中提取的 token 用量信息
+#[derive(Debug, Clone, Default)]
+pub struct UsageInfo {
+    pub prompt_tokens: i64,
+    pub completion_tokens: i64,
+}
+
+impl UsageInfo {
+    pub fn add_prompt(&mut self, value: i64) {
+        self.prompt_tokens += value.max(0);
+    }
+
+    pub fn add_completion(&mut self, value: i64) {
+        self.completion_tokens += value.max(0);
+    }
+}
+
 /// 协议类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Protocol {

@@ -36,6 +36,9 @@ export interface AccessKey {
   tpm_limit: number
   expires_at: string | null
   last_used_at: string | null
+  total_requests: number
+  total_prompt_tokens: number
+  total_completion_tokens: number
   created_at: string | null
 }
 
@@ -52,8 +55,8 @@ export interface TestKeyResult {
   key_id: number
   platform: string
   available: boolean
-  openai?: { success: boolean; latency_ms: number; status?: number; error?: string } | null
-  claude?: { success: boolean; latency_ms: number; status?: number; error?: string } | null
+  openai?: { success: boolean; reachable: boolean; key_valid: boolean; upstream_error: boolean; latency_ms: number; status?: number; error?: string } | null
+  claude?: { success: boolean; reachable: boolean; key_valid: boolean; upstream_error: boolean; latency_ms: number; status?: number; error?: string } | null
 }
 
 // 添加号池 Key 请求体
@@ -107,6 +110,88 @@ export interface CreateAccessKeyResponse {
   message: string
 }
 
+// 用量统计 - 全局概览
+export interface StatsOverview {
+  total_requests: number
+  total_prompt_tokens: number
+  total_completion_tokens: number
+  total_tokens: number
+  active_pool_keys: number
+  active_access_keys: number
+}
+
+// 用量统计 - 号池 Key 统计行
+export interface PoolKeyStats {
+  key_id: number
+  name: string
+  platform: string
+  total_requests: number
+  total_prompt_tokens: number
+  total_completion_tokens: number
+  success_rate: number
+  avg_latency_ms: number
+  last_used_at: string | null
+}
+
+// 用量统计 - 访问 Key 统计行
+export interface AccessKeyStats {
+  access_key_id: number
+  name: string
+  total_requests: number
+  total_prompt_tokens: number
+  total_completion_tokens: number
+  last_used_at: string | null
+}
+
+// 用量统计 - 按模型细分
+export interface ModelStats {
+  model: string
+  requests: number
+  prompt_tokens: number
+  completion_tokens: number
+}
+
+// 用量统计 - 小时趋势数据
+export interface HourlyStats {
+  hour_bucket: number
+  model: string
+  request_count: number
+  prompt_tokens: number
+  completion_tokens: number
+}
+
+// 用量统计 - 访问 Key 列表响应
+export interface AccessKeyStatsResponse {
+  total: {
+    total_requests: number
+    total_prompt_tokens: number
+    total_completion_tokens: number
+  }
+  keys: AccessKeyStats[]
+}
+
+// Key 健康评分（GET /admin/keys/health-score 返回）
+export interface KeyHealthScore {
+  key_id: number
+  key_name?: string
+  health_score: number       // 0-100
+  score_source: 'realtime' | 'window' | 'nodata'
+  status_label: 'normal' | 'light_throttled' | 'heavy_throttled' | 'critical' | 'nodata'
+  sample_count: number
+  low_confidence: boolean    // Window 来源且样本 < 5 时为 true
+}
+
+// 实时活跃密钥（SSE /admin/keys/active-stream 推送）
+export interface ActiveKeyEntry {
+  request_id: number
+  key_id: number
+  key_name: string
+  key_prefix: string
+  platform: string
+  model: string
+  started_at: number  // Unix 毫秒时间戳
+}
+
 // 模型列表条目
 export interface ModelEntry {
   id: string
@@ -117,6 +202,11 @@ export interface ModelEntry {
 
 // 对话协议类型
 export type ChatProtocol = 'openai' | 'claude'
+
+// 模型预设 (GET /admin/models/presets 返回)
+export interface ModelPresetsResponse {
+  presets: Record<string, string[]>
+}
 
 // 对话历史消息
 export interface ChatHistoryMsg {

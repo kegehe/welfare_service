@@ -1,14 +1,21 @@
 import { defineConfig } from 'vite'
-import vue from '@vitejs/plugin-vue'
-import { viteSingleFile } from 'vite-plugin-singlefile'
+import react from '@vitejs/plugin-react'
 import path from 'path'
 
 export default defineConfig({
-  plugins: [vue(), viteSingleFile()],
+  plugins: [react()],
   build: {
     target: 'esnext',
     outDir: '../static',
-    emptyOutDir: false,
+    emptyOutDir: true, // 构建时清空 outDir，避免旧 hashed 文件堆积
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-antd': ['antd', '@ant-design/icons', 'react', 'react-dom'],
+          'vendor-echarts': ['echarts', 'echarts-for-react'],
+        },
+      },
+    },
   },
   resolve: {
     alias: {

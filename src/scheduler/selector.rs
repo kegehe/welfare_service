@@ -17,10 +17,10 @@ pub struct KeyCandidate {
 ///
 /// 从活跃 Key 池中选择一个可用的 Key 处理请求。
 /// 选择策略:
-/// 1. 优先选择精确支持目标模型的 Key
-/// 2. 如果没有精确匹配，则自动映射到号池 Key 配置的第一个可用模型
-/// 2. 检查熔断器状态
-/// 3. 随机选择一个
+/// 1. 过滤不可用 Key（熔断、冷却、协议不匹配、未配置模型）
+/// 2. 优先选择精确支持目标模型的 Key
+/// 3. 如果没有精确匹配，则自动映射到号池 Key 配置的第一个可用模型
+/// 4. 随机打散候选
 pub struct KeySelector<'a> {
     state: &'a AppState,
 }
@@ -31,9 +31,18 @@ impl<'a> KeySelector<'a> {
     }
 
     /// 获取当前可用候选 Key。返回结果会被随机打散，调用方可按顺序尝试。
-    pub fn candidates(&self, model: &str, protocol: Protocol) -> Result<Vec<KeyCandidate>> {
+    ///
+    /// `has_tools`: 请求中是否包含 tools 参数或 tool_result 消息。
+    /// 目前仅用于日志标记；带工具的请求也会在无精确匹配时映射到
+    /// 号池 Key 自己配置的上游模型。
+    pub fn candidates(
+        &self,
+        model: &str,
+        protocol: Protocol,
+        has_tools: bool,
+    ) -> Result<Vec<KeyCandidate>> {
         let keys = self.state.db.get_active_keys()?;
-        self.candidates_from_keys(keys, model, protocol)
+        self.candidates_from_keys(keys, model, protocol, has_tools)
     }
 
     fn candidates_from_keys(
@@ -41,6 +50,7 @@ impl<'a> KeySelector<'a> {
         keys: Vec<ApiKeyRecord>,
         requested_model: &str,
         protocol: Protocol,
+        has_tools: bool,
     ) -> Result<Vec<KeyCandidate>> {
         if keys.is_empty() {
             return Err(AppError::NoAvailableKey);
@@ -88,6 +98,13 @@ impl<'a> KeySelector<'a> {
             return Ok(exact_candidates);
         }
 
+        if has_tools {
+            tracing::info!(
+                "请求包含工具调用但无精确匹配模型: requested_model={}，将按号池 Key 配置模型回退映射",
+                requested_model
+            );
+        }
+
         let mut candidates: Vec<KeyCandidate> = available
             .into_iter()
             .map(|(key, models)| {
@@ -114,7 +131,7 @@ impl<'a> KeySelector<'a> {
     /// 选择一个可用的 Key
     #[allow(dead_code)]
     pub fn select_key(&self, model: &str) -> Result<ApiKeyRecord> {
-        self.candidates(model, Protocol::OpenAI)?
+        self.candidates(model, Protocol::OpenAI, false)?
             .into_iter()
             .map(|candidate| candidate.key)
             .next()
@@ -140,9 +157,33 @@ fn supports_protocol(key: &ApiKeyRecord, protocol: Protocol) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_models, supports_protocol};
+    use super::{parse_models, supports_protocol, KeySelector};
+    use crate::config::Config;
+    use crate::crypto::KeyStore;
+    use crate::db::Database;
     use crate::db::models::ApiKeyRecord;
     use crate::proxy::Protocol;
+    use crate::state::AppState;
+    use tokio_util::sync::CancellationToken;
+
+    fn make_key(id: i64, models: &str, claude_url: &str) -> ApiKeyRecord {
+        ApiKeyRecord {
+            id,
+            platform: "test".to_string(),
+            name: String::new(),
+            api_key: "encrypted".to_string(),
+            openai_url: String::new(),
+            claude_url: claude_url.to_string(),
+            models: models.to_string(),
+            tpm_limit: 0,
+            rpm_limit: 0,
+            status: "active".to_string(),
+            source: None,
+            note: None,
+            created_at: None,
+            updated_at: None,
+        }
+    }
 
     #[test]
     fn parse_models_trims_and_drops_empty_values() {
@@ -159,24 +200,41 @@ mod tests {
 
     #[test]
     fn supports_only_configured_protocol_urls() {
-        let key = ApiKeyRecord {
-            id: 1,
-            platform: "test".to_string(),
-            name: String::new(),
-            api_key: "encrypted".to_string(),
-            openai_url: "https://openai.test/v1".to_string(),
-            claude_url: String::new(),
-            models: "[]".to_string(),
-            tpm_limit: 0,
-            rpm_limit: 0,
-            status: "active".to_string(),
-            source: None,
-            note: None,
-            created_at: None,
-            updated_at: None,
-        };
+        let mut key = make_key(1, "[]", "");
+        key.openai_url = "https://openai.test/v1".to_string();
 
         assert!(supports_protocol(&key, Protocol::OpenAI));
         assert!(!supports_protocol(&key, Protocol::Claude));
+    }
+
+    #[test]
+    fn tools_requests_fallback_to_key_configured_model() {
+        let mut path = std::env::temp_dir();
+        path.push(format!(
+            "welfare_selector_tools_fallback_{}.db",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+
+        let db = Database::open(&path).unwrap();
+        let key_store = KeyStore::from_base64_key(&KeyStore::generate_key()).unwrap();
+        let state = AppState::new(Config::default(), db, key_store, CancellationToken::new());
+        state.register_pool_key(&make_key(1, r#"["mimo-v2.5-pro"]"#, "https://claude.test"));
+
+        let selector = KeySelector::new(&state);
+        let candidates = selector
+            .candidates_from_keys(
+                vec![make_key(1, r#"["mimo-v2.5-pro"]"#, "https://claude.test")],
+                "claude-opus-4-8",
+                Protocol::Claude,
+                true,
+            )
+            .unwrap();
+
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].upstream_model, "mimo-v2.5-pro");
+        assert!(!candidates[0].matched_requested_model);
+
+        let _ = std::fs::remove_file(path);
     }
 }

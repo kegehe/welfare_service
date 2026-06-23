@@ -133,6 +133,9 @@ pub async fn add_key(
         state.register_pool_key(&key);
     }
 
+    // 健康评分缓存失效：新增 Key 后评分列表需要更新
+    state.health_cache.invalidate();
+
     Ok((
         StatusCode::CREATED,
         Json(json!({
@@ -229,6 +232,10 @@ pub async fn update_key(
     }
 
     tracing::info!("更新 API Key: id={}, platform={}", id, input.platform);
+
+    // 健康评分缓存失效：Key 名称或配置可能变更
+    state.health_cache.invalidate();
+
     Ok(Json(json!({
         "id": id,
         "message": "API Key 更新成功"
@@ -246,6 +253,8 @@ pub async fn remove_key(
     if removed {
         // 从令牌桶和熔断器中移除
         state.unregister_pool_key(id);
+        // 健康评分缓存失效：Key 删除后评分列表需要更新
+        state.health_cache.invalidate();
         tracing::info!("删除 API Key: id={}", id);
         Ok(Json(json!({ "message": "API Key 已删除" })))
     } else {
@@ -271,6 +280,18 @@ pub async fn health_status(State(state): State<AppState>) -> Result<impl IntoRes
         "active_keys": total_keys,
         "version": env!("CARGO_PKG_VERSION"),
         "base_url": format!("http://{}:{}", display_host, port),
+    })))
+}
+
+/// GET /admin/models/presets
+///
+/// 返回每个平台的预设模型列表
+pub async fn model_presets(
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, AppError> {
+    let presets = &state.config.models.presets;
+    Ok(Json(json!({
+        "presets": presets
     })))
 }
 
@@ -333,6 +354,10 @@ pub async fn toggle_key(
     }
 
     tracing::info!("切换 Key {} 状态为 {}", id, new_status);
+
+    // 健康评分缓存失效：Key 状态变更可能影响评分
+    state.health_cache.invalidate();
+
     Ok(Json(json!({
         "id": id,
         "status": new_status,
@@ -344,11 +369,22 @@ pub async fn toggle_key(
 ///
 /// 提供 Web 管理页面
 pub async fn serve_ui() -> impl IntoResponse {
-    (
-        axum::http::StatusCode::OK,
-        [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
-        include_str!("../../../static/index.html"),
-    )
+    // 从文件系统读取 HTML，支持热更新前端
+    match tokio::fs::read_to_string("static/index.html").await {
+        Ok(html) => (
+            axum::http::StatusCode::OK,
+            [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
+            html,
+        ),
+            Err(_) => {
+            // 降级为编译时嵌入的版本
+            (
+                axum::http::StatusCode::OK,
+                [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
+                include_str!("../../../static/index.html").to_string(),
+            )
+        }
+    }
 }
 
 /// 密钥脱敏: sk-1234567890 -> sk-12****90
@@ -397,6 +433,9 @@ pub async fn list_access_keys(
                 "tpm_limit": k.tpm_limit,
                 "expires_at": k.expires_at,
                 "last_used_at": k.last_used_at,
+                "total_requests": k.total_requests,
+                "total_prompt_tokens": k.total_prompt_tokens,
+                "total_completion_tokens": k.total_completion_tokens,
                 "created_at": k.created_at,
             })
         })
@@ -563,7 +602,8 @@ pub async fn toggle_access_key(
 /// POST /admin/keys/:id/test
 ///
 /// 测试号池 Key 的连通性和可用性。
-/// 向上游发送一个轻量级请求 (GET /v1/models)，测量响应时间和状态。
+/// 分别向上游 OpenAI 和 Claude 端点发送轻量级 GET 请求，测量响应时间和状态。
+/// 结果区分"端点可达"和"Key 认证有效"两种状态。
 pub async fn test_key(
     State(state): State<AppState>,
     Path(id): Path<i64>,
@@ -580,29 +620,43 @@ pub async fn test_key(
         .decrypt(&key.api_key)
         .map_err(|e| AppError::Internal(format!("解密 Key 失败: {}", e)))?;
 
-    // 只测试已配置的端点。
-    let openai_fut = test_configured_upstream(&state, key.openai_url.trim(), &decrypted, "openai");
-    let claude_fut = test_configured_upstream(&state, key.claude_url.trim(), &decrypted, "claude");
+    // 并发测试已配置的端点
+    let openai_fut =
+        test_configured_upstream(&state, key.openai_url.trim(), &decrypted, "openai");
+    let claude_fut =
+        test_configured_upstream(&state, key.claude_url.trim(), &decrypted, "claude");
     let (openai_result, claude_result) = tokio::join!(openai_fut, claude_fut);
     let openai_result = openai_result?;
     let claude_result = claude_result?;
 
-    // 综合判断：只要有一个端点可用就认为 Key 可用
-    let available = openai_result.as_ref().map(|r| r.success).unwrap_or(false)
-        || claude_result.as_ref().map(|r| r.success).unwrap_or(false);
+    // 综合判断：只要有一个端点 key 认证有效就认为 Key 可用
+    let available = openai_result
+        .as_ref()
+        .map(|r| r.key_valid)
+        .unwrap_or(false)
+        || claude_result
+            .as_ref()
+            .map(|r| r.key_valid)
+            .unwrap_or(false);
 
     Ok(Json(json!({
         "key_id": id,
         "platform": key.platform,
         "available": available,
         "openai": openai_result.map(|r| json!({
-            "success": r.success,
+            "success": r.key_valid,
+            "reachable": r.reachable,
+            "key_valid": r.key_valid,
+            "upstream_error": r.upstream_error,
             "latency_ms": r.latency_ms,
             "status": r.status,
             "error": r.error,
         })),
         "claude": claude_result.map(|r| json!({
-            "success": r.success,
+            "success": r.key_valid,
+            "reachable": r.reachable,
+            "key_valid": r.key_valid,
+            "upstream_error": r.upstream_error,
             "latency_ms": r.latency_ms,
             "status": r.status,
             "error": r.error,
@@ -612,7 +666,12 @@ pub async fn test_key(
 
 /// 上游测试结果
 struct TestResult {
-    success: bool,
+    /// 端点是否可达（收到 HTTP 响应，非 404）
+    reachable: bool,
+    /// Key 认证是否有效（2xx/400/405/422/429）
+    key_valid: bool,
+    /// 上游是否暂时不可用（5xx）
+    upstream_error: bool,
     latency_ms: u64,
     status: Option<u16>,
     error: Option<String>,
@@ -620,15 +679,23 @@ struct TestResult {
 
 /// 向上游发送轻量级测试请求
 ///
-/// 使用 GET /v1/models 端点验证连通性（这是最轻量的 API 调用）
+/// OpenAI: GET {base_url}/models (如 /v1/models 或 /v2/models，版本号在 base_url 中)
+/// Claude: GET {base_url}/v1/messages (Claude API 只支持 POST，GET 返回 405 即代表端点可达)
 async fn test_upstream(
     state: &AppState,
     base_url: &str,
     api_key: &str,
     protocol: &str,
 ) -> Result<TestResult, AppError> {
-    // 构建测试 URL: base_url + /models (去除前导空格和尾部斜杠)
-    let test_url = format!("{}/models", base_url.trim().trim_end_matches('/'));
+    // 拼接测试 URL:
+    // base_url 已包含版本前缀（如 /v1, /v2, /anthropic），直接追加相对路径
+    // OpenAI: {base_url}/models (如 /v1/models 或 /v2/models)
+    // Claude: {base_url}/v1/messages (如 /anthropic/v1/messages)
+    let test_url = match protocol {
+        "openai" => format!("{}/models", base_url.trim().trim_end_matches('/')),
+        "claude" => format!("{}/v1/messages", base_url.trim().trim_end_matches('/')),
+        _ => format!("{}/models", base_url.trim().trim_end_matches('/')),
+    };
 
     let mut req = state.http_client.get(&test_url);
 
@@ -654,17 +721,38 @@ async fn test_upstream(
         Ok(response) => {
             let latency = start.elapsed().as_millis() as u64;
             let status = response.status().as_u16();
-            let success = response.status().is_success();
+            let is_success = response.status().is_success();
 
             // 读取响应体 (小请求，不会很大)
             let _body = response.text().await;
 
+            // 判定逻辑：
+            // - 2xx: key 有效，端点可达
+            // - 400: 请求格式问题（如 GET /messages 缺少 body），端点可达，key 可能有效
+            // - 401/403: 认证失败，端点可达但 key 无效
+            // - 404: 端点不存在（可能 URL 配置错误或中转站未实现），视为不可达
+            // - 405: 方法不允许（Claude GET /messages），端点可达，key 可能有效
+            // - 422: 请求体验证失败，端点可达，key 可能有效
+            // - 429: 限流，端点可达，key 有效
+            // - 5xx: 上游错误，端点可达但暂时不可用，key 状态未知
+            let reachable = !matches!(status, 404);
+            let key_valid = is_success || matches!(status, 400 | 405 | 422 | 429);
+            let upstream_error = status >= 500;
+
             Ok(TestResult {
-                success,
+                reachable,
+                key_valid,
+                upstream_error,
                 latency_ms: latency,
                 status: Some(status),
-                error: if success {
+                error: if key_valid {
                     None
+                } else if !reachable {
+                    Some(format!("HTTP {} (端点不可达)", status))
+                } else if upstream_error {
+                    Some(format!("HTTP {} (上游暂时不可用)", status))
+                } else if matches!(status, 401 | 403) {
+                    Some(format!("HTTP {} (认证失败)", status))
                 } else {
                     Some(format!("HTTP {}", status))
                 },
@@ -681,7 +769,9 @@ async fn test_upstream(
             };
 
             Ok(TestResult {
-                success: false,
+                reachable: false,
+                key_valid: false,
+                upstream_error: false,
                 latency_ms: latency,
                 status: None,
                 error: Some(error_msg),
@@ -703,4 +793,315 @@ async fn test_configured_upstream(
     test_upstream(state, base_url, api_key, protocol)
         .await
         .map(Some)
+}
+
+// ============================================================
+// 用量统计
+// ============================================================
+
+/// GET /admin/stats/overview
+///
+/// 全局概览统计
+pub async fn stats_overview(
+    State(state): State<AppState>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<impl IntoResponse, AppError> {
+    let hours: i64 = params
+        .get("hours")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(24)
+        .clamp(1, 720);
+
+    let stats = state.db.get_stats_overview(hours)?;
+
+    Ok(Json(json!({
+        "total_requests": stats.total_requests,
+        "total_prompt_tokens": stats.total_prompt_tokens,
+        "total_completion_tokens": stats.total_completion_tokens,
+        "total_tokens": stats.total_prompt_tokens + stats.total_completion_tokens,
+        "active_pool_keys": stats.active_pool_keys,
+        "active_access_keys": stats.active_access_keys,
+    })))
+}
+
+/// GET /admin/stats/pool-keys
+///
+/// 号池 Key 用量列表
+pub async fn stats_pool_keys(
+    State(state): State<AppState>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<impl IntoResponse, AppError> {
+    let hours: i64 = params
+        .get("hours")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(24)
+        .clamp(1, 720);
+
+    let stats = state.db.get_pool_key_stats(hours)?;
+
+    let keys_json: Vec<_> = stats
+        .iter()
+        .map(|s| {
+            json!({
+                "key_id": s.key_id,
+                "name": s.name,
+                "platform": s.platform,
+                "total_requests": s.total_requests,
+                "total_prompt_tokens": s.total_prompt_tokens,
+                "total_completion_tokens": s.total_completion_tokens,
+                "success_rate": (s.success_rate * 100.0).round() / 100.0,
+                "avg_latency_ms": (s.avg_latency_ms).round(),
+                "last_used_at": s.last_used_at,
+            })
+        })
+        .collect();
+
+    Ok(Json(json!({ "keys": keys_json })))
+}
+
+/// GET /admin/stats/pool-keys/{id}
+///
+/// 单个号池 Key 用量详情
+pub async fn stats_pool_key_detail(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<impl IntoResponse, AppError> {
+    let hours: i64 = params
+        .get("hours")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(24)
+        .clamp(1, 720);
+
+    // 获取总体统计
+    let pool_stats = state.db.get_pool_key_stats(hours)?;
+    let key_stats = pool_stats
+        .iter()
+        .find(|s| s.key_id == id)
+        .ok_or_else(|| AppError::BadRequest(format!("号池 Key ID {} 无统计数据", id)))?;
+
+    // 获取按模型统计
+    let model_stats = state.db.get_pool_key_model_stats(id, hours)?;
+
+    let by_model: Vec<_> = model_stats
+        .iter()
+        .map(|m| {
+            json!({
+                "model": m.model,
+                "requests": m.requests,
+                "prompt_tokens": m.prompt_tokens,
+                "completion_tokens": m.completion_tokens,
+            })
+        })
+        .collect();
+
+    Ok(Json(json!({
+        "key_id": key_stats.key_id,
+        "name": key_stats.name,
+        "platform": key_stats.platform,
+        "total_requests": key_stats.total_requests,
+        "total_prompt_tokens": key_stats.total_prompt_tokens,
+        "total_completion_tokens": key_stats.total_completion_tokens,
+        "by_model": by_model,
+        "success_rate": (key_stats.success_rate * 100.0).round() / 100.0,
+        "avg_latency_ms": (key_stats.avg_latency_ms).round(),
+    })))
+}
+
+/// GET /admin/stats/access-keys
+///
+/// 访问 Key 用量列表（含全部合计）
+pub async fn stats_access_keys(
+    State(state): State<AppState>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<impl IntoResponse, AppError> {
+    let hours: i64 = params
+        .get("hours")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(24)
+        .clamp(1, 720);
+
+    let stats = state.db.get_access_key_stats(hours)?;
+
+    // 计算合计
+    let total_requests: i64 = stats.iter().map(|s| s.total_requests).sum();
+    let total_prompt_tokens: i64 = stats.iter().map(|s| s.total_prompt_tokens).sum();
+    let total_completion_tokens: i64 = stats.iter().map(|s| s.total_completion_tokens).sum();
+
+    let keys_json: Vec<_> = stats
+        .iter()
+        .map(|s| {
+            json!({
+                "access_key_id": s.access_key_id,
+                "name": s.name,
+                "total_requests": s.total_requests,
+                "total_prompt_tokens": s.total_prompt_tokens,
+                "total_completion_tokens": s.total_completion_tokens,
+                "last_used_at": s.last_used_at,
+            })
+        })
+        .collect();
+
+    Ok(Json(json!({
+        "total": {
+            "total_requests": total_requests,
+            "total_prompt_tokens": total_prompt_tokens,
+            "total_completion_tokens": total_completion_tokens,
+        },
+        "keys": keys_json,
+    })))
+}
+
+/// GET /admin/stats/access-keys/{id}
+///
+/// 单个访问 Key 用量详情
+pub async fn stats_access_key_detail(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<impl IntoResponse, AppError> {
+    let hours: i64 = params
+        .get("hours")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(24)
+        .clamp(1, 720);
+
+    // 获取总体统计
+    let access_stats = state.db.get_access_key_stats(hours)?;
+    let key_stats = access_stats
+        .iter()
+        .find(|s| s.access_key_id == id)
+        .ok_or_else(|| AppError::BadRequest(format!("访问 Key ID {} 无统计数据", id)))?;
+
+    // 获取按模型统计
+    let model_stats = state.db.get_access_key_model_stats(id, hours)?;
+
+    let by_model: Vec<_> = model_stats
+        .iter()
+        .map(|m| {
+            json!({
+                "model": m.model,
+                "requests": m.requests,
+                "prompt_tokens": m.prompt_tokens,
+                "completion_tokens": m.completion_tokens,
+            })
+        })
+        .collect();
+
+    Ok(Json(json!({
+        "access_key_id": key_stats.access_key_id,
+        "name": key_stats.name,
+        "total_requests": key_stats.total_requests,
+        "total_prompt_tokens": key_stats.total_prompt_tokens,
+        "total_completion_tokens": key_stats.total_completion_tokens,
+        "by_model": by_model,
+        "last_used_at": key_stats.last_used_at,
+    })))
+}
+
+/// GET /admin/stats/hourly
+///
+/// 小时级趋势数据
+pub async fn stats_hourly(
+    State(state): State<AppState>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<impl IntoResponse, AppError> {
+    let hours: i64 = params
+        .get("hours")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(24)
+        .clamp(1, 720);
+
+    let dimension = params
+        .get("dimension")
+        .map(|s| s.as_str())
+        .unwrap_or("pool");
+
+    if !matches!(dimension, "pool" | "access") {
+        return Err(AppError::BadRequest(
+            "dimension 必须是 pool 或 access".to_string(),
+        ));
+    }
+
+    let key_id = params.get("key_id").and_then(|v| v.parse::<i64>().ok());
+
+    let stats = state.db.get_hourly_stats(dimension, key_id, hours)?;
+
+    let data: Vec<_> = stats
+        .iter()
+        .map(|s| {
+            json!({
+                "hour_bucket": s.hour_bucket,
+                "model": s.model,
+                "request_count": s.request_count,
+                "prompt_tokens": s.prompt_tokens,
+                "completion_tokens": s.completion_tokens,
+            })
+        })
+        .collect();
+
+    Ok(Json(json!({ "data": data })))
+}
+
+// ============================================================
+// 实时活跃密钥 SSE 推送
+// ============================================================
+
+/// GET /admin/keys/active-stream
+///
+/// SSE 端点：实时推送当前活跃密钥状态变更。
+///
+/// 事件类型:
+/// - snapshot: 连接建立时推送完整快照
+/// - update: 活跃表变更时推送当前完整快照
+pub async fn active_keys_stream(
+    State(state): State<AppState>,
+) -> axum::response::Sse<impl futures::Stream<Item = Result<axum::response::sse::Event, std::convert::Infallible>>> {
+    use axum::response::sse::{Event, KeepAlive, Sse};
+
+    // 连接建立时，先推送完整快照
+    let snapshot = state.active_keys_notifier.snapshot();
+    let snapshot_data = serde_json::to_string(&snapshot).unwrap_or_else(|_| "[]".to_string());
+    let snapshot_event = Event::default()
+        .event("snapshot")
+        .data(snapshot_data);
+
+    let watch_rx = state.active_keys_notifier.subscribe();
+    let notifier = state.active_keys_notifier.clone();
+    let cancel = state.cancel_token.clone();
+
+    // 用 unfold 创建 stream：先 yield snapshot，然后持续监听变更
+    // 收到关闭信号后流会提前终止，确保优雅关闭时不会因 SSE 长连接卡住进程
+    let stream = futures::stream::unfold(
+        (Some(snapshot_event), watch_rx, notifier, cancel),
+        |(initial, mut rx, notifier, cancel)| async move {
+            // 第一次迭代：yield snapshot 事件
+            if let Some(event) = initial {
+                return Some((Ok(event), (None, rx, notifier, cancel)));
+            }
+
+            // 后续迭代：等待变更通知或关闭信号
+            tokio::select! {
+                result = rx.changed() => {
+                    if result.is_err() {
+                        return None; // 通道关闭，结束 stream
+                    }
+
+                    let current = notifier.snapshot();
+                    let data = serde_json::to_string(&current).unwrap_or_else(|_| "[]".to_string());
+                    let event = Event::default()
+                        .event("update")
+                        .data(data);
+
+                    Some((Ok(event), (None, rx, notifier, cancel)))
+                }
+                _ = cancel.cancelled() => {
+                    // 收到关闭信号，结束 stream
+                    None
+                }
+            }
+        },
+    );
+
+    Sse::new(stream).keep_alive(KeepAlive::default())
 }

@@ -12,6 +12,7 @@ tower-http = { version = "0.6", features = ["cors", "trace"] }
 
 # Async runtime
 tokio = { version = "1", features = ["full"] }
+tokio-util = "0.7"
 
 # HTTP client (使用 rustls 避免系统 OpenSSL 依赖)
 reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }

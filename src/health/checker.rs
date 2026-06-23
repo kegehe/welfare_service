@@ -1,6 +1,8 @@
 use std::collections::HashSet;
 use std::time::Duration;
 
+use tokio_util::sync::CancellationToken;
+
 use crate::state::AppState;
 
 /// 健康检查器
@@ -10,31 +12,50 @@ use crate::state::AppState;
 /// 2. 被动监测: 根据请求日志分析 Key 健康状况
 pub struct HealthChecker {
     state: AppState,
+    cancel: CancellationToken,
 }
 
 impl HealthChecker {
-    pub fn new(state: AppState) -> Self {
-        Self { state }
+    pub fn new(state: AppState, cancel: CancellationToken) -> Self {
+        Self { state, cancel }
     }
 
     /// 启动定时健康检查任务
-    pub fn start_background(self) {
+    ///
+    /// 返回 JoinHandle 以便在关闭时等待任务结束。
+    pub fn start_background(self) -> tokio::task::JoinHandle<()> {
+        let cancel = self.cancel.clone();
         let interval = self.state.config.health.check_interval_secs;
 
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             // 延迟第一次检查，避免启动时的无意义探测
             let first_tick = tokio::time::Instant::now() + Duration::from_secs(interval);
             let mut timer = tokio::time::interval_at(first_tick, Duration::from_secs(interval));
             loop {
-                timer.tick().await;
-                self.run_checks().await;
+                tokio::select! {
+                    _ = timer.tick() => {
+                        self.run_checks().await;
+                    }
+                    _ = cancel.cancelled() => {
+                        tracing::info!("健康检查器收到关闭信号，退出");
+                        break;
+                    }
+                }
+                // run_checks 结束后再检查一次，避免等待下一轮 tick
+                if cancel.is_cancelled() {
+                    tracing::info!("健康检查器收到关闭信号，退出");
+                    break;
+                }
             }
         });
 
         tracing::info!("健康检查器已启动，间隔 {} 秒", interval);
+        handle
     }
 
     /// 执行一轮健康检查
+    ///
+    /// 在遍历 key 时会检查取消信号，收到关闭信号后提前退出。
     async fn run_checks(&self) {
         let keys = match self.state.db.get_active_keys() {
             Ok(keys) => keys,
@@ -48,8 +69,14 @@ impl HealthChecker {
         let mut disabled_this_round = HashSet::new();
 
         for key in &keys {
-            // 被动监测: 检查最近请求的成功率
-            match self.state.db.get_key_health_stats(key.id, 20) {
+            // 收到关闭信号后提前退出本轮检查
+            if self.cancel.is_cancelled() {
+                tracing::info!("健康检查器在检查过程中收到关闭信号，跳过剩余 Key");
+                return;
+            }
+
+            // 被动监测: 检查最近请求的成功率（排除 429 限流，避免临时限流导致误下线）
+            match self.state.db.get_key_health_stats_excluding_rate_limited(key.id, 20) {
                 Ok(stats) => {
                     if stats.total >= self.state.config.health.passive_failure_threshold
                         && stats.success_rate
@@ -72,8 +99,8 @@ impl HealthChecker {
                 }
             }
 
-            // 被动监测: 检查连续失败次数
-            match self.state.db.get_key_consecutive_failures(key.id) {
+            // 被动监测: 检查连续失败次数（排除 429 限流，避免临时限流导致误下线）
+            match self.state.db.get_key_consecutive_failures_excluding_rate_limited(key.id) {
                 Ok(failures) => {
                     if failures >= self.state.config.health.passive_failure_threshold {
                         tracing::warn!(
@@ -119,12 +146,23 @@ impl HealthChecker {
             }
         }
 
+        // 收到关闭信号后跳过重试启用和清理，加速退出
+        if self.cancel.is_cancelled() {
+            tracing::info!("健康检查器在检查过程中收到关闭信号，跳过后续清理");
+            return;
+        }
+
         // 尝试重新启用之前被禁用的 Key
         self.try_reenable_keys(&disabled_this_round).await;
 
         // 清理过期日志
         if let Err(e) = self.state.db.cleanup_old_logs(7) {
             tracing::error!("清理过期日志失败: {}", e);
+        }
+
+        // 清理过期用量统计数据
+        if let Err(e) = self.state.db.cleanup_usage_hourly(7, 90) {
+            tracing::error!("清理过期用量统计失败: {}", e);
         }
 
         tracing::info!("健康检查完成");
@@ -201,32 +239,30 @@ impl HealthChecker {
             return Err("端点未配置".to_string());
         }
 
-        let (probe_url, auth_header) = if is_openai {
-            (
-                format!("{}/models", base_url.trim_end_matches('/')),
-                (
-                    "Authorization".to_string(),
-                    format!("Bearer {}", decrypted_key),
-                ),
-            )
+        // 拼接探测 URL:
+        // base_url 已包含版本前缀（如 /v1, /v2, /anthropic），直接追加相对路径
+        // OpenAI: {base_url}/models (如 /v1/models 或 /v2/models)
+        // Claude: {base_url}/v1/messages (如 /anthropic/v1/messages)
+        // 注意：不使用 build_upstream_url，因为探测路径不来自客户端 request_path
+        let probe_url = if is_openai {
+            format!("{}/models", base_url.trim_end_matches('/'))
         } else {
-            // Claude 端点使用 x-api-key 认证
-            (
-                format!("{}/messages", base_url.trim_end_matches('/')),
-                ("x-api-key".to_string(), decrypted_key),
-            )
+            format!("{}/v1/messages", base_url.trim_end_matches('/'))
         };
 
         let mut req = self
             .state
             .http_client
             .get(&probe_url)
-            .header(&auth_header.0, &auth_header.1)
             .timeout(Duration::from_secs(
                 self.state.config.health.probe_timeout_secs,
             ));
 
-        if !is_openai {
+        if is_openai {
+            req = req.header("Authorization", format!("Bearer {}", decrypted_key));
+        } else {
+            // Claude 端点使用 x-api-key 认证
+            req = req.header("x-api-key", &decrypted_key);
             req = req.header("anthropic-version", "2023-06-01");
         }
 
@@ -234,7 +270,14 @@ impl HealthChecker {
 
         let status = response.status().as_u16();
 
-        if response.status().is_success() || matches!(status, 400 | 404 | 405 | 422 | 429) {
+        // 判定逻辑：
+        // - 2xx: 请求成功，key 有效
+        // - 400/405/422: 端点可达，请求格式问题（GET /messages 返回 405 即代表端点存在且 key 被接受）
+        // - 401/403: 认证失败，key 无效或被封
+        // - 404: 端点不存在（URL 配置错误或中转站未实现该端点），视为不可用
+        // - 429: 限流，key 有效但暂时不可用
+        // - 5xx/网络错误: 上游不可达
+        if response.status().is_success() || matches!(status, 400 | 405 | 422 | 429) {
             return Ok(());
         }
 

@@ -1,0 +1,354 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Welfare Service — Component Styles
+   「信号协议」Signal Protocol
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Key Display ── */
+.key-display {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  background: var(--key-bg);
+  border: 1px solid var(--key-border);
+  border-radius: var(--radius-sm);
+  padding: 2px var(--space-2);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  letter-spacing: var(--tracking-mono);
+}
+
+.key-display:hover {
+  background: var(--key-hover-bg);
+  border-color: var(--ws-flow);
+  color: var(--ws-flow-dark);
+}
+
+/* ── Config Block (code display) ── */
+.config-block {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  background: var(--ws-conduit);
+  color: var(--ws-channel);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  line-height: var(--leading-relaxed);
+  overflow-x: auto;
+  margin: var(--space-2) 0;
+  border: 1px solid var(--ws-conduit-light);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Active Keys Grid
+   ═══════════════════════════════════════════════════════════════════ */
+
+.active-keys-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-4);
+}
+
+.active-key-card {
+  transition: all var(--transition-normal);
+  border-radius: var(--radius-lg) !important;
+}
+
+.active-key-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg) !important;
+}
+
+.active-key-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.active-key-name {
+  font-family: var(--font-display);
+  font-weight: var(--weight-semibold);
+  font-size: var(--text-base);
+  color: var(--text);
+  letter-spacing: var(--tracking-normal);
+}
+
+.active-key-time {
+  font-size: var(--text-sm);
+  color: var(--text2);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Pool Keys Grid (Card View)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.pool-keys-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--space-4);
+}
+
+/* ── Pool Key Card ── */
+.pool-key-card__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.pool-key-card__name {
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-normal);
+}
+
+.pool-key-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.pool-key-card__label {
+  color: var(--text3);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  font-weight: var(--weight-medium);
+}
+
+.pool-key-card__tags {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.pool-key-card__note {
+  font-size: var(--text-sm);
+  color: var(--text3);
+  font-style: italic;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Circuit Alert
+   ═══════════════════════════════════════════════════════════════════ */
+
+.circuit-alert {
+  animation: pulse-alarm 2s ease-in-out infinite;
+  border-top: 2px solid var(--ws-fault) !important;
+}
+
+@keyframes pulse-alarm {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(var(--ws-fault-rgb), 0.3);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(var(--ws-fault-rgb), 0);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Form Row (TPM/RPM side-by-side)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.form-row {
+  display: flex;
+  gap: var(--space-4);
+}
+
+.form-row .ant-form-item {
+  flex: 1;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Text Utilities
+   ═══════════════════════════════════════════════════════════════════ */
+
+.text-muted {
+  color: var(--text3);
+  font-size: var(--text-sm);
+}
+
+.text-label {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  color: var(--text3);
+  font-weight: var(--weight-medium);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Chart Toolbar
+   ═══════════════════════════════════════════════════════════════════ */
+
+.chart-toolbar {
+  margin-bottom: var(--space-4);
+  display: flex;
+  gap: var(--space-4);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Config Section (ShowKeyModal, Access Instructions)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.config-section {
+  margin-bottom: var(--space-4);
+}
+
+.config-section h4 {
+  font-family: var(--font-display);
+  font-weight: var(--weight-semibold);
+  font-size: var(--text-sm);
+  color: var(--text2);
+  margin-top: var(--space-4);
+  margin-bottom: var(--space-2);
+}
+
+.config-section__title {
+  margin-top: var(--space-2);
+}
+
+.config-section__copy-btn {
+  margin-top: var(--space-2);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Key Display Row (ShowKeyModal)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.key-display-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.key-display-text {
+  flex: 1;
+  font-size: var(--text-lg);
+  word-break: break-all;
+  font-family: var(--font-mono);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Test Result (TestResultModal)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.test-endpoint-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.test-endpoint-error {
+  font-size: var(--text-sm);
+}
+
+.test-endpoint-alert {
+  margin-top: var(--space-1);
+  font-size: var(--text-sm);
+}
+
+.test-result-summary {
+  margin-top: var(--space-5);
+  text-align: center;
+}
+
+.test-result-tag {
+  font-size: var(--text-lg);
+  padding: var(--space-1-5) var(--space-4);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Health Score Grid (100-cell signal matrix)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.health-score-grid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.health-score-grid__bars {
+  display: grid;
+  grid-template-columns: repeat(100, 2px);
+  gap: 1px;
+}
+
+.health-score-grid__cell {
+  width: 2px;
+  height: 12px;
+  border-radius: 1px;
+  transition: background-color var(--transition-normal);
+}
+
+/* score=0 且非 NoData: 红色边框区分 "已知故障" */
+.health-score-grid__bars--critical-empty .health-score-grid__cell {
+  box-shadow: inset 0 0 0 1px var(--ws-fault);
+}
+
+/* Low confidence dashed pattern */
+.health-score-grid__cell--low-conf {
+  opacity: 0.7;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 1px,
+    rgba(255,255,255,0.35) 1px,
+    rgba(255,255,255,0.35) 2px
+  ) !important;
+}
+
+.health-score-grid__label {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  text-align: center;
+  line-height: 1;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.health-score-grid__label--normal { color: var(--ws-signal); }
+.health-score-grid__label--light_throttled { color: var(--ws-lime); }
+.health-score-grid__label--heavy_throttled { color: var(--ws-fuse); }
+.health-score-grid__label--critical { color: var(--ws-fault); }
+.health-score-grid__label--nodata { color: var(--text3); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Section Spacing
+   ═══════════════════════════════════════════════════════════════════ */
+
+.section-card__row {
+  margin-bottom: var(--space-6);
+}
+
+.section-card__spaced {
+  margin-top: var(--space-6);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Usage Table
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Summary row */
+.ant-table-summary > tr > td {
+  font-family: var(--font-display);
+  font-weight: var(--weight-semibold);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Responsive
+   ═══════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  .active-keys-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pool-keys-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .form-row {
+    flex-direction: column;
+  }
+}

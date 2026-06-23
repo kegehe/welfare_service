@@ -1,0 +1,22 @@
+{
+  "name": "welfare-service-admin",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "echarts": "^6.1.0",
+    "element-plus": "^2.9",
+    "vue": "^3.5"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5",
+    "typescript": "^5.7",
+    "vite": "^6",
+    "vite-plugin-singlefile": "^2",
+    "vue-tsc": "^2"
+  }
+}

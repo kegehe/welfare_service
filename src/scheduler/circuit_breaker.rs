@@ -186,6 +186,41 @@ impl CircuitBreakerManager {
         }
     }
 
+    pub fn snapshot(&self) -> Vec<CircuitBreakerSnapshot> {
+        let breakers = self.breakers.read();
+        breakers
+            .iter()
+            .map(|(key_id, breaker)| CircuitBreakerSnapshot {
+                key_id: *key_id,
+                state: breaker.state.clone(),
+                failure_count: breaker.failure_count,
+                last_failure_at: breaker.last_failure_at,
+                opened_at: breaker.opened_at,
+            })
+            .collect()
+    }
+
+    pub fn restore(
+        &self,
+        key_id: i64,
+        state: CircuitState,
+        failure_count: u32,
+        last_failure_at: Option<DateTime<Utc>>,
+        opened_at: Option<DateTime<Utc>>,
+    ) {
+        let mut breakers = self.breakers.write();
+        breakers.insert(
+            key_id,
+            CircuitBreaker {
+                state,
+                failure_count,
+                last_failure_at,
+                opened_at,
+                config: self.config.clone(),
+            },
+        );
+    }
+
     /// 获取指定 Key 的熔断器状态
     #[allow(dead_code)]
     pub fn state(&self, key_id: i64) -> CircuitState {
@@ -207,4 +242,13 @@ impl CircuitBreakerManager {
             0
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct CircuitBreakerSnapshot {
+    pub key_id: i64,
+    pub state: CircuitState,
+    pub failure_count: u32,
+    pub last_failure_at: Option<DateTime<Utc>>,
+    pub opened_at: Option<DateTime<Utc>>,
 }
