@@ -1,0 +1,62 @@
+# Welfare Service 配置文件
+# 复制本文件为 config.toml 并修改对应配置
+
+[server]
+host = "0.0.0.0"
+port = 8080
+# CORS 允许的源 (留空则不限制，多源用逗号分隔 "http://localhost:3000")
+cors_origin = ""
+
+[database]
+path = "./data/welfare.db"
+
+[encryption]
+# AES-256-GCM 加密密钥 (32 bytes, base64 编码)
+# 请运行 `welfare-service gen-key` 生成
+master_key = ""
+
+[health]
+# 健康检查间隔 (秒)
+check_interval_secs = 300
+# 被动检测连续失败禁用阈值
+passive_failure_threshold = 5
+# 被动检测错误率禁用阈值 (0.0-1.0)
+passive_error_rate_threshold = 0.5
+# 主动探测超时 (秒)
+probe_timeout_secs = 10
+
+[scheduler]
+# 全局 TPM 上限 (0 = 不限制，所有 Key 共享)
+global_tpm = 0
+# 全局 RPM 上限 (0 = 不限制，所有 Key 共享)
+global_rpm = 0
+
+[rate_limit]
+# 单 Key TPM 上限 (0 = 不限制，每个 Key 独立)
+default_tpm = 0
+# 单 Key RPM 上限 (0 = 不限制)
+default_rpm = 0
+
+[circuit_breaker]
+# 连续失败几次后熔断
+failure_threshold = 5
+# 熔断后恢复探测间隔 (秒)
+recovery_timeout_secs = 60
+# 半开状态探测请求比例 (0.0-1.0)
+half_open_probe_ratio = 0.1
+
+[proxy]
+# 上游请求超时 (秒)
+upstream_timeout_secs = 300
+# 上游返回 429 后，该号池 Key 暂停使用秒数
+rate_limit_cooldown_secs = 30
+# HTTP 连接池大小
+pool_size = 100
+
+[models]
+# 每个平台预设的模型名称列表 (管理员添加 Key 时可作为下拉选项选择)
+# 也可手动输入不在列表中的自定义模型名
+[models.presets]
+xiaomi = ["mimo-v2.5-pro", "astron-code-latest"]
+iflytek = ["spark-v4-ultra", "spark-v3.5", "spark-v3"]
+anthropic = ["claude-sonnet-4-6", "claude-opus-4-8", "claude-haiku-3-5"]
